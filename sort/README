@@ -1,0 +1,31 @@
+This file contains some C source files that compare the efficiency of my shell
+sort with that of the ANSI C qsort() and a fast qsort(), the source of which
+is provided in qsort.c.  These comparisons are mostly of academic interest.  Below is a list of the files here and what they do:
+
+clean.sh - cleans up stuff after it is created.
+makem.sh - builds all the test programs in this directory.
+flog*.c - C source files testing various components of the shell sort.
+flog*.sh - shell drivers that can be used for testing.
+word*.c - C source files that create bogus data for sorting.
+outstats.{c,sh} - C source and shell driver used to average comparison results
+  over thousands of iterations.
+sort.{c,h}, qsort.c - Actual sort routines.  These are symbolic links to files
+in the lib and include directories.
+
+To build the tests, type
+
+export CFLAGS="-O3 -s -march=pentium4 -mcpu=pentium4 -pipe"
+bash makem.sh
+
+You can change the CFLAGS to suite your system.  To clean up stuff, type
+
+bash clean.sh
+
+To run a given test, type, for example,
+
+bash flogshsort.sh
+
+If you want to change the number of items being sorted, you can edit the
+shell driver and change it there (the default is 250,000).
+
+Enjoy.

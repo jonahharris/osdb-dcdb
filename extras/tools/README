@@ -1,0 +1,12 @@
+These are tcl tools that I designed to work with DCDB database tables.  I keep
+them in my home bin directory (/home/dfmay/bin) and the shared object is in
+/home/dfmay/lib.  You will need to change these for your environment.
+
+tablels.tcl - prints out the data stored in the table given on the command line.
+tableshow.tcl - prints info. about the table given on the command line.
+dfgen.c - generates a df file that, when run with dbcreate will recreated the
+          table given on the command line.
+dbdump.c - dumps the data in the table so that you can recreate it with TCL.
+
+dfgen and dbdump should be used together to archive tables in ASCII text format.
+

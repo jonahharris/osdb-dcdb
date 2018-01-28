@@ -1,0 +1,79 @@
+CINT is a C/C++ interpreter that is available for numerous architectures under
+the GPL license.  You can get it at
+
+ftp://root.cern.ch/root/cint5.16.tar.gz
+
+The advantage to using cint is that you can develop in an interpreted
+environment and then fairly quickly migrate to C code.  C programs written using
+DCDB are orders of magnitude faster than comparable scripted programs.  CINT is
+supported for Linux, Solaris and Cygwin - the major platforms supported by DCDB.
+
+Installing CINT
+
+Here, in a nutshell, is how to install CINT.  First, create a directory for the
+distribution and unpack CINT in that directory:
+
+mkdir cint5.15
+cd cint5.15
+gzip -dc ../cint5.16.tar.gz |tar xzf -
+
+Then, read the README.txt file.  It has detailed instructions on installation. 
+Essentially, you have to edit one of the files in platform that is closest to
+your configuration to suit you.  For example, for Gentoo 2005.2, I used
+
+platform/gcc_min
+
+I changed the OPTIMIZE variable in that file to
+
+OPTIMIZE    = -O2 -s -march=pentium4 -mcpu=pentium4
+
+Then, I did a
+
+bash setup platform/gcc_min
+
+It compiled cleanly.  Then, I used INSTALLBIN to install it, as follows:
+
+bash INSTALLBIN --bindir=/opt/cint5.16/bin --libdir=/opt/cint5.16/lib \
+  --mandir=/opt/cint5.16/man --docdir=/opt/cint5.16/doc
+
+Note: you must use bash.  I tried running this with /bin/sh and it failed. 
+After you have done that, set
+
+CINTSYSDIR=/opt/cint5.16/lib
+
+and place /opt/cint5.16/bin in your path.  You are now ready to use CINT.
+
+I used the following platform files for Cygwin and Solaris:
+
+Cygwin:  platform/cygwin51_gcc3_so
+Solaris: platform/solaris_gcc
+
+Making mycint for DCDB bindings
+
+In the primary DCDB Makefile, there are 2 variables you have to concern
+yourself with.  For my configuration, they are as follows:
+
+CINTSYSDIR=/opt/cint5.16/lib
+CINTBIN=/opt/cint5.16/bin/cint
+
+Set CINTDYSDIR to what it is in the INSTALLBIN script (--libdir) and set CINTBIN
+to the name of the cint binary.  For example, with the installation above, it
+would be
+
+CINTBIN=/opt/cint5.16/bin/cint
+
+Then, in the cint Makefile (cdb-1.1/src/cint/Makefile), you have to set three
+variables, like the following:
+
+CINTSYSDIR=/opt/cint5.16/lib
+CINTBIN = /opt/cint5.16/bin/cint
+CINTMAKEBIN = /opt/cint5.16/bin/cintmake
+
+Finally, in (topdir)/extras/cint, type
+
+make
+
+That should create a binary in (topdir)/extras/cint called mycint that will
+contain the DCDB bindings and the container stuff.  You can use that for
+developing you C/C++ scripts.
+

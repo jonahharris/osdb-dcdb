@@ -1,0 +1,5 @@
+# [BeginDoc]
+# [Verbatim]
+cdb::randomInit $seed
+# [EndDoc]
+#

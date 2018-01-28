@@ -1,0 +1,778 @@
+#!/bin/sh
+# Use /bin/sh to execute... \
+  exec tclsh "$0" "$@"
+
+#
+# Server component of the fido duo.
+#
+# The client grabs the information on the specified files and transfers the
+# data over the chanel to the server.  This system is designed to create a
+# socket on a port and listen for a client connection.  Then, it processes
+# the data and either generates a first-time database (if this is the first
+# time fidod has been run for the system being analyzed) or generates
+# any relevant reports about system changes.
+#
+
+#
+# Load the shared object.
+#
+set SLE [info sharedlibextension]
+if [ catch { load ./libcdbtcl$SLE } result ] {
+  puts "Could not load ./libcdbtcl$SLE: $result"
+  exit 1
+}
+
+#
+# Load the configuration file for this architecture.  Change whichever .config
+# file that meets your needs.
+#
+set OS_TYPE [ eval exec uname ]
+if { $OS_TYPE == "SunOS" } {
+  puts "Loading fido.solaris.config..."
+  source fido.solaris.config
+} elseif { $OS_TYPE == "Linux" } {
+  puts "Loading fido.linux.config..."
+  source fido.linux.config
+} else {
+  puts "Loading fido.default.config..."
+  source fido.default.config
+}
+
+#
+# Initial message
+#
+puts "Fido run: $dt"
+
+#
+# Handle command-line.
+#
+# fidod (no argument) - PORT = default (see config file).
+# fidod one - PORT=one.
+#
+if { $argc == 0 } {
+  set PORT $default_port
+}
+
+if { $argc == 1 } {
+  set PORT [ lindex $argv 0 ]
+}
+
+if { $argc > 1 } {
+  puts "Usage: $argv0 [port]"
+  puts "  where port (if specified) is a port number above 1024."
+  exit 1
+}
+
+proc bgerror { str } {
+  global errorInfo
+  global errorCode
+  puts stderr "***Error: $str"
+  puts stderr "errorInfo: $errorInfo"
+  puts stderr "errorCode: $errorCode"
+}
+
+proc fidoServer { port } {
+  global fido_soc
+  set fido_soc(main) [ socket -server fidoAccept $port ]
+}
+
+proc fidoAccept { sock addr port } {
+  global fido_soc
+  puts "Fidod: Accepting $sock from $addr port $port"
+  set fido_soc(addr,$sock) [list $addr $port]
+  fconfigure $sock -buffering line
+  fileevent $sock readable [ list fidoGet $sock ]
+}
+
+proc fidoGet { sock } {
+  global fido_soc
+  global fido_finished
+  if { [ eof $sock ] || [ catch { gets $sock this_line } ] } {
+    close $sock
+    puts "Close $fido_soc(addr,$sock)"
+    unset fido_soc(addr,$sock)
+    set fido_finished 1
+  } else {
+    # Regular line...process it.
+    #
+    set status [ string compare $this_line "**END**" ]
+    if { ! $status } {
+      puts ""
+      puts "Received termination indicator..."
+      close $sock
+      unset fido_soc(addr,$sock)
+      set fido_finished 1
+      return
+    }
+    set status [ fidoClientProcess $this_line ]
+    if { $status } {
+      exit 1
+    }
+  }
+}
+
+proc createDatabase { dbname } {
+  global dt
+  if [ catch { set this_db [ open /tmp/$dbname.df w 0644 ] } result ] {
+    puts stderr "Could not open /tmp/$dbname.df: $result"
+    return 1
+  }
+  puts $this_db "create table \"tmp_$dbname.db\""
+  puts $this_db "  info \"Table of consistency checks for $dbname created $dt\""
+  puts $this_db "\{"
+  puts $this_db {  "fspec" char (256);}
+  puts $this_db {  "uid" char(10);}
+  puts $this_db {  "gid" char(10);}
+  puts $this_db {  "size" number (12:0);}
+  puts $this_db {  "mode" char(10);}
+  puts $this_db {  "mtime" char(19);}
+  puts $this_db {  "md5sum" char (32);}
+  puts $this_db {  "sha1sum" char (40);}
+  puts $this_db {  "ripesum" char (40);}
+  puts $this_db "\} indexed \{"
+  puts $this_db "  idx \"tmp_$dbname\" 4096:case:unique \"fspec\";"
+  puts $this_db "\};"
+  close $this_db
+
+  set pwd [ pwd ]
+  cd /tmp
+  set status [ file exists $dbname.db ]
+  if { ! $status } {
+    if [ catch { dbcreate $dbname.df } result ] {
+      puts stderr "Could not create from $dbname.df: $result"
+      return 1
+    }
+  }
+  file delete $dbname.df
+  cd $pwd
+  return 0
+}
+
+proc createPermenantDatabase { dbname } {
+  global dt
+  global FIDO_ROOT
+  if [ catch { set this_db [ open $FIDO_ROOT/$dbname.df w 0644 ] } result ] {
+    puts stderr "Could not open $FIDO_ROOT/$dbname.df: $result"
+    return 1
+  }
+  puts $this_db "create table \"$dbname.db\""
+  puts $this_db "  info \"Table of consistency checks for $dbname created $dt\""
+  puts $this_db "\{"
+  puts $this_db {  "fspec" char (256);}
+  puts $this_db {  "uid" char (10);}
+  puts $this_db {  "gid" char (10);}
+  puts $this_db {  "size" number (12:0);}
+  puts $this_db {  "mode" char (10);}
+  puts $this_db {  "mtime" char (19);}
+  puts $this_db {  "md5sum" char (32);}
+  puts $this_db {  "sha1sum" char (40);}
+  puts $this_db {  "ripesum" char (40);}
+  puts $this_db "\} indexed \{"
+  puts $this_db "  idx \"$dbname\" 4096:case:unique \"fspec\";"
+  puts $this_db "\};"
+  close $this_db
+
+  set pwd [ pwd ]
+  cd $FIDO_ROOT
+  set status [ file exists $dbname.db ]
+  if { ! $status } {
+    if [ catch { dbcreate $dbname.df } result ] {
+      puts stderr "Could not create from $dbname.df: $result"
+      return 1
+    }
+  }
+  file delete $dbname.df
+  cd $pwd
+  return 0
+}
+
+proc fidoClientProcess { line } {
+  global dt
+  global FIDO_ROOT
+  global fido_soc
+  global counter
+
+  incr fido_soc(line)
+  set inList [ split $line | ]
+  if { $fido_soc(line) == 1 || $fido_soc(host) == "" } {
+    set hostnm [ lindex $inList 0 ]
+    set fido_soc(host) $hostnm
+    puts $fido_soc(host)
+    # Go on and open the journal file here as well.
+    if [catch {set fido_soc(jnlfile) \
+      [open "$FIDO_ROOT/tmp/$fido_soc(host).$dt.jnl" w 0600]} result] {
+      puts "***Error: could not open $FIDO_ROOT/tmp/$fido_soc(host).$dt.jnl: $result"
+      exit 1
+    }
+  }
+  #if { $fido_soc(host) == "" } {
+  #	set fido_soc(host) $hostnm
+  #	puts $fido_soc(host)
+  #}
+  set status [ file exists /tmp/tmp_$fido_soc(host).db ]
+  if { ! $status } {
+    set status [ createDatabase $fido_soc(host) ]
+    if { $status } {
+      return 1
+    }
+  }
+  set pwd [ pwd ]
+  if { $fido_soc(db) == "" } {
+    if [ catch { set fido_soc(db) [ dbopen tmp_$fido_soc(host).db ] } result ] {
+      puts stderr "Could not open tmp_$fido_soc(host).db: $result"
+      dbexit
+      return 1
+    }
+  }
+  set item [ lindex $inList 1 ]
+  if [ catch { dbsetchar $fido_soc(db) fspec "$item" } result ] {
+    puts stderr "Could not set fspec in tmp_$fido_soc(host).db: $result"
+    dbexit
+    return 1
+  }
+  set item_len [ string len $item ]
+  if { $item_len > 256 } {
+    puts stderr ""
+    puts stderr "***Warning: length of file spec = $item_len: \"$item\""
+  }
+  set uid [ lindex $inList 2 ]
+  if [ catch { dbsetchar $fido_soc(db) uid "$uid" } result ] {
+    puts stderr "Could not set uid in tmp_$fido_soc(host).db: $result"
+    dbexit
+    return 1
+  }
+  set gid [ lindex $inList 3 ]
+  if [ catch { dbsetchar $fido_soc(db) gid "$gid" } result ] {
+    puts stderr "Could not set gid in tmp_$fido_soc(host).db: $result"
+    dbexit
+    return 1
+  }
+  set size [ lindex $inList 4 ]
+  if [ catch { dbsetnum $fido_soc(db) size "$size" } result ] {
+    puts stderr "Could not set size in tmp_$fido_soc(host).db: $result"
+    dbexit
+    return 1
+  }
+  set mode [ lindex $inList 5 ]
+  if [ catch { dbsetchar $fido_soc(db) mode "$mode" } result ] {
+    puts stderr "Could not set mode in tmp_$fido_soc(host).db: $result"
+    dbexit 
+    return 1
+  }
+  set mtime [ lindex $inList 6 ]
+  if [ catch { dbsetchar $fido_soc(db) mtime "$mtime" } result ] {
+    puts stderr "Could not set mtime in tmp_$fido_soc(host).db: $result"
+    dbexit
+    return 1
+  }
+  set md5sum [ lindex $inList 7 ]
+  if [ catch { dbsetchar $fido_soc(db) md5sum "$md5sum" } result ] {
+    puts stderr "Could not set md5sum in tmp_$fido_soc(host).db: $result"
+    dbexit
+    return 1
+  }
+  set sha1sum [ lindex $inList 8 ]
+  if [ catch { dbsetchar $fido_soc(db) sha1sum "$sha1sum" } result ] {
+    puts stderr "Could not set sha1sum in tmp_$fido_soc(host).db: $result"
+    dbexit
+    return 1
+  }
+  set ripesum [ lindex $inList 9 ]
+  if [ catch { dbsetchar $fido_soc(db) ripesum "$ripesum" } result ] {
+    puts stderr "Could not set ripesum in tmp_$fido_soc(host).db: $result"
+    dbexit
+    return 1
+  }
+  if [ catch { dbadd $fido_soc(db) } result ] {
+    if {"$result" == "adding record: unique index constraint violated"} {
+      # ignore it
+      puts stderr "\n***Warning: unique index constraint violated adding $item"
+      return 0
+    }
+    puts stderr "Adding a record to tmp_$fido_soc(host).db: $result"
+    puts stderr "File/dir name = $item"
+    dbexit
+    return 1
+  }
+  # Populate the journal line
+  set outline [format "%s|%s|%s|%s|%s|%s|%s|%s|%s" $item $uid $gid $size \
+    $mode $mtime $md5sum $sha1sum $ripesum]
+  puts $fido_soc(jnlfile) $outline
+  # done
+  incr counter 1
+  set status [ expr $counter % 1000 ]
+  if { ! $status } {
+    puts -nonewline "."
+    flush stdout
+  }
+  return 0
+}
+
+proc copyDatabase { newdb olddb } {
+  dbhead $newdb
+  while { 1 } {
+    set result [ dbiseof $newdb ]
+    if { $result == 1 } {
+      break
+    }
+    set result [ dbretrieve $newdb ]
+    if { $result == 0 } {
+      # Skip deleted items...
+      dbnext $newdb
+      continue
+    }
+    # "fspec" char 
+    # "uid" char
+    # "gid" char
+    # "size" number
+    # "mode" char
+    # "mtime" char
+    # "md5sum" char
+    # "sha1sum" char
+    # "ripesum" char
+    set fspec [ dbshow $newdb fspec ]
+    dbsetchar $olddb fspec $fspec
+    set uid [ dbshow $newdb uid ]
+    dbsetchar $olddb uid $uid
+    set gid [ dbshow $newdb gid ]
+    dbsetchar $olddb gid $gid
+    set size [ dbshow $newdb size ]
+    dbsetnum $olddb size $size
+    set mode [ dbshow $newdb mode ]
+    dbsetchar $olddb mode $mode
+    set mtime [ dbshow $newdb mtime ]
+    dbsetchar $olddb mtime $mtime
+    set md5sum [ dbshow $newdb md5sum ]
+    dbsetchar $olddb md5sum $md5sum
+    set sha1sum [ dbshow $newdb sha1sum ]
+    dbsetchar $olddb sha1sum $sha1sum
+    set ripesum [ dbshow $newdb ripesum ]
+    dbsetchar $olddb ripesum $ripesum
+    if [ catch { dbadd $olddb } result ] {
+      puts stderr "Adding a record to $olddb: $result"
+      return 1
+    }
+    dbnext $newdb
+  }
+  return 0
+}
+
+proc fido_adds { newdb olddb } {
+  global fido_soc
+  global dt
+  global FIDO_ROOT
+
+  #
+  # Search for stuff in newdb that is not in olddb.
+  #
+  set pwd [ pwd ]
+  cd $FIDO_ROOT
+  set fido_soc(adds) [ open tmp/$fido_soc(host)_adds.$dt w ]
+  puts $fido_soc(adds) "Adds on $fido_soc(host) : $dt"
+
+  #
+  # Set current indexes
+  #
+  dbheadindex $newdb
+  dbcurrent $olddb "$fido_soc(host)"
+
+  #
+  # Traverse through the new database one record at a time.
+  #
+  set is_adds 0
+  while { 1 } {
+    set result [ dbiseof $newdb ]
+    if { $result == 1 } {
+      break
+    }
+    set result [ dbretrieve $newdb ]
+    if { $result == 0 } {
+      # There should not be any deleted items, but skip
+      # them anyway.
+      dbnextindex $newdb
+      continue
+    }
+    set new_spec [ dbshow $newdb fspec ]
+    set new_mtime [ dbshow $newdb mtime ]
+    set status [ dbsearchexact $olddb $new_spec ]
+    if { $status == 0 } {
+      incr is_adds
+      puts $fido_soc(adds) "$new_mtime : $new_spec"
+      #puts "is_adds is $is_adds..."
+    }
+    dbnextindex $newdb
+  }
+  if { ! $is_adds } {
+    close $fido_soc(adds)
+    file delete tmp/$fido_soc(host)_adds.$dt
+  } else {
+    puts "$is_adds adds in tmp/$fido_soc(host)_adds.$dt"
+    puts $fido_soc(adds) "Done: $is_adds adds on $fido_soc(host)"
+    puts $fido_soc(adds) ""
+    puts $fido_soc(adds) ""
+    close $fido_soc(adds)
+  }
+  cd $pwd
+}
+
+proc fido_deletes { newdb olddb } {
+  global fido_soc
+  global dt
+  global FIDO_ROOT
+
+  #
+  # Search for stuff in olddb that is not in newdb.
+  #
+  set pwd [ pwd ]
+  cd $FIDO_ROOT
+  set fido_soc(deletes) [ open tmp/$fido_soc(host)_deletes.$dt w ]
+  puts $fido_soc(deletes) "Deletes on $fido_soc(host) : $dt"
+
+
+  #
+  # Set current indexes
+  #
+  dbheadindex $olddb
+  dbcurrent $newdb "tmp_$fido_soc(host)"
+
+  #
+  # Traverse through the old database one record at a time
+  #
+  set is_deletes 0
+  while { 1 } {
+    set result [ dbiseof $olddb ]
+    if { $result == 1 } {
+      break
+    }
+    set result [ dbretrieve $olddb ]
+    if { $result == 0 } {
+      # There should not be any deleted items, but skip
+      # them anyway.
+      dbnextindex $olddb
+      continue
+    }
+    set del_spec [ dbshow $olddb fspec ]
+    set status [ dbsearchexact $newdb $del_spec ]
+    if { $status == 0 } {
+      incr is_deletes
+      puts $fido_soc(deletes) $del_spec
+    }
+    dbnextindex $olddb
+  }
+  if { ! $is_deletes } {
+    close $fido_soc(deletes)
+    file delete tmp/$fido_soc(host)_deletes.$dt
+  } else {
+    puts "$is_deletes deletes in tmp/$fido_soc(host)_deletes.$dt"
+    puts $fido_soc(deletes) "Done: $is_deletes deletes on $fido_soc(host)"
+    puts $fido_soc(deletes) ""
+    puts $fido_soc(deletes) ""
+    close $fido_soc(deletes)
+  }
+  cd $pwd
+}
+
+proc fido_changes { newdb olddb } {
+  global fido_soc
+  global dt
+  global FIDO_ROOT
+
+  #
+  # Traverse olddb.  For each item there, if it is in newdb, then compare
+  # the fields of the database between the two and document any diffs
+  # in the changes file.
+  #
+  set pwd [ pwd ]
+  cd $FIDO_ROOT
+  set fido_soc(changes) [ open tmp/$fido_soc(host)_changes.$dt w ]
+  puts $fido_soc(changes) "Changes on $fido_soc(host) : $dt"
+
+  #
+  # Set current indexes
+  #
+  dbcurrent $newdb "tmp_$fido_soc(host)"
+  dbheadindex $olddb
+
+  #
+  # Traverse the old database.
+  #
+  set is_changes 0
+  while { 1 } {
+    set print_changes 0
+    set result [ dbiseof $olddb ]
+    if { $result == 1 } {
+      break
+    }
+    set result [ dbretrieve $olddb ]
+    if { $result == 0 } {
+      dbnextindex $olddb
+      continue
+    }
+    set old_fspec [ dbshow $olddb fspec ]
+    set status [ dbsearchexact $newdb $old_fspec ]
+    #
+    # Only deal with it if we found one in both databases.
+    #
+    #if { $status != 1 } {
+    #	puts "Status = $status for fspec $old_fspec"
+    #}
+    if { $status == 1 } {
+      set result [ dbretrieve $newdb ]
+      if { $result == 0 } {
+	dbnextindex $olddb
+	continue
+      }
+      #
+      # Note: mtime is not really the mtime anymore---it is the ctime.
+      # The following are the fields that we want to
+      # compare (not including fspec):
+      # "uid" char 
+      # "gid" char 
+      # "size" number 
+      # "mode" char 
+      # "mtime" char
+      # "md5sum" char 
+      # "sha1sum" char
+      # "ripesum" char
+      #
+      set user_chg 0
+      set old_uid [ dbshow $olddb uid ]
+      set new_uid [ dbshow $newdb uid ]
+      set status [ string compare $old_uid $new_uid ]
+      if { $status } {
+	set user_chg 1
+	incr print_changes
+      }
+      set grp_chg 0
+      set old_gid [ dbshow $olddb gid ]
+      set new_gid [ dbshow $newdb gid ]
+      set status [ string compare $old_gid $new_gid ]
+      if { $status } {
+	set grp_chg 1
+	incr print_changes
+      }
+      set size_chg 0
+      set old_size [ dbshow $olddb size ]
+      set new_size [ dbshow $newdb size ]
+      set status [ string compare $old_size $new_size ]
+      if { $status } {
+	set size_chg 1
+	incr print_changes
+      }
+      set mode_chg 0
+      set old_mode [ dbshow $olddb mode ]
+      set new_mode [ dbshow $newdb mode ]
+      set status [ string compare $old_mode $new_mode ]
+      if { $status } {
+	set mode_chg 1
+	incr print_changes
+      }
+      set mtime_chg 0
+      set old_mtime [ dbshow $olddb mtime ]
+      set new_mtime [ dbshow $newdb mtime ]
+      # 20021007 - Don't set a change flag based only on time.
+      set status [ string compare $old_mtime $new_mtime ]
+      if { $status } {
+	set mtime_chg 1
+	#				incr print_changes
+      }
+      set md5_chg 0
+      set old_md5sum [ dbshow $olddb md5sum ]
+      set new_md5sum [ dbshow $newdb md5sum ]
+      set status [ string compare $old_md5sum $new_md5sum ]
+      if { $status } {
+	set md5_chg 1
+	incr print_changes
+      }
+      set sha1_chg 0
+      set old_sha1sum [ dbshow $olddb sha1sum ]
+      set new_sha1sum [ dbshow $newdb sha1sum ]
+      set status [ string compare $old_sha1sum $new_sha1sum ]
+      if { $status } {
+	set sha1_chg 1
+	incr print_changes
+      }
+      set ripe_chg 0
+      set old_ripesum [ dbshow $olddb ripesum ]
+      set new_ripesum [ dbshow $newdb ripesum ]
+      set status [ string compare $old_ripesum $new_ripesum ]
+      if { $status } {
+	set ripe_chg 1
+	incr print_changes
+      }
+      if { $print_changes } {
+	incr is_changes
+	set fspec [ dbshow $olddb fspec ]
+	puts $fido_soc(changes) "$fspec  ($print_changes changed parameters + time)"
+	puts -nonewline $fido_soc(changes) " Changes \[ "
+	if { $user_chg } {
+	  puts -nonewline $fido_soc(changes) "user "
+	}
+	if { $grp_chg } {
+	  puts -nonewline $fido_soc(changes) "grp "
+	}
+	if { $size_chg } {
+	  puts -nonewline $fido_soc(changes) "size "
+	}
+	if { $mode_chg } {
+	  puts -nonewline $fido_soc(changes) "mode "
+	}
+	if { $mtime_chg } {
+	  puts -nonewline $fido_soc(changes) "time "
+	}
+	if { $md5_chg } {
+	  puts -nonewline $fido_soc(changes) "md5 "
+	}
+	if { $sha1_chg } {
+	  puts -nonewline $fido_soc(changes) "sha1 "
+	}
+	if { $ripe_chg } {
+	  puts -nonewline $fido_soc(changes) "ripe "
+	}
+	puts $fido_soc(changes) "\]"
+	set out_string [ format "  old uid:  %20s  new uid:  %20s" $old_uid $new_uid ]
+	puts $fido_soc(changes) $out_string
+	set out_string [ format "  old gid:  %20s  new gid:  %20s" $old_gid $new_gid ]
+	puts $fido_soc(changes) $out_string
+	set out_string [ format "  old size: %20d  new size: %20d" $old_size $new_size ]
+	puts $fido_soc(changes) $out_string
+	set out_string [ format "  old mode: %20s  new mode: %20s" $old_mode $new_mode ]
+	puts $fido_soc(changes) $out_string
+	set out_string [ format "  old time: %20s  new time: %20s" $old_mtime $new_mtime ]
+	puts $fido_soc(changes) $out_string
+	puts $fido_soc(changes) ""
+	puts $fido_soc(changes) "  old md5sum =  $old_md5sum"
+	puts $fido_soc(changes) "  new md5sum =  $new_md5sum"
+	puts $fido_soc(changes) ""
+	puts $fido_soc(changes) "  old sha1sum = $old_sha1sum"
+	puts $fido_soc(changes) "  new sha1sum = $new_sha1sum"
+	puts $fido_soc(changes) ""
+	puts $fido_soc(changes) "  old ripesum = $old_ripesum"
+	puts $fido_soc(changes) "  new ripesum = $new_ripesum"
+	puts $fido_soc(changes) ""
+	puts $fido_soc(changes) ""
+      }
+    }
+    dbnextindex $olddb
+  }
+  if { ! $is_changes } {
+    close $fido_soc(changes)
+    file delete tmp/$fido_soc(host)_changes.$dt
+  } else {
+    puts "$is_changes changes in tmp/$fido_soc(host)_changes.$dt"
+    puts $fido_soc(changes) "Done: $is_changes changes on $fido_soc(host)"
+    close $fido_soc(changes)
+  }
+  cd $pwd
+}
+
+set counter 0
+
+set fido_soc(host) ""
+set fido_soc(db) ""
+set fido_soc(line) 0
+set fido_soc(jnlfile) ""
+
+cd /tmp
+
+fidoServer $PORT
+vwait fido_finished
+
+close $fido_soc(jnlfile)
+puts "Closing $fido_soc(db)"
+dbclose $fido_soc(db)
+
+cd $FIDO_ROOT
+
+#
+# Now, determine whether or not there is already a file for this host.  If so,
+# compare the output now with the previous output.  If not, move the current
+# database file over to the FIDO_ROOT directory.
+#
+
+puts "$fido_soc(line) entries put in /tmp/$fido_soc(host)"
+
+if [ file exists $FIDO_ROOT/$fido_soc(host).db ] {
+  # The database is there...check the consistency against an old copy.
+  puts "Doing a consistency check:"
+  puts "Opening databases..."
+  set pwd [ pwd ]
+  cd /tmp
+  #set new_db_file [ format "tmp_%s.db" $fido_soc(host) ]
+  #file rename $fido_soc(host).db $new_db_file
+  #set new_inx_file [ format "tmp_%s.inx" $fido_soc(host) ]
+  #file rename $fido_soc(host).inx $new_inx_file
+  #set new_idx_file [ format "tmp_%s.idx" $fido_soc(host) ]
+  #file rename $fido_soc(host).idx $new_idx_file
+  if [ catch { set newdb [ dbopen tmp_$fido_soc(host).db ] } result ] {
+    puts stderr "Could not open /tmp/tmp_$fido_soc(host): $result"
+    dbexit
+    exit 1
+  }
+  puts "$newdb..."
+  cd $FIDO_ROOT
+  if [ catch { set olddb [ dbopen $fido_soc(host).db ] } result ] {
+    puts stderr "Could not open $FIDO_ROOT/$fido_soc(host).db: $result"
+    dbclose $olddb
+    cd /tmp
+    dbclose $newdb
+    cd $pwd
+    dbexit
+    exit 1
+  }
+  puts "$olddb..."
+  puts "Doing adds..."
+  fido_adds $newdb $olddb 
+  puts "Doing deletes..."
+  fido_deletes $newdb $olddb 
+  puts "Doing changes..."
+  fido_changes $newdb $olddb
+  puts "Done."
+  dbclose $olddb
+  cd /tmp
+  dbclose $newdb
+  dbexit
+  cd $pwd
+  exit 0
+} else {
+  # The database is not there...move it over.
+
+  set status [ createPermenantDatabase $fido_soc(host) ]
+  if { $status } {
+    puts stderr "Could not create $FIDO_ROOT/$fido_soc(host).db"
+    exit 1
+  }
+  set pwd [ pwd ]
+  cd /tmp
+  if [ catch { set newdb [ dbopen tmp_$fido_soc(host).db ] } result ] {
+    puts stderr "Could not open /tmp/tmp_$fido_soc(host).db: $result"
+    exit 1
+  }
+  cd $FIDO_ROOT
+  if [ catch { set olddb [ dbopen $fido_soc(host).db ] } result ] {
+    puts stderr "Could not open $FIDO_ROOT/$fido_soc(host).db: $result"
+    dbexit
+    exit 1
+  }
+  set result [ copyDatabase $newdb $olddb ]
+  if { $result } {
+    cd $FIDO_ROOT
+    dbclose $olddb
+    cd /tmp
+    dbclose $newdb
+    dbexit
+    exit 1
+  }
+  cd $FIDO_ROOT
+  dbclose $olddb
+  cd /tmp
+  dbclose $newdb
+  dbexit
+
+  puts "/tmp/$fido_soc(host).db,inx,idx copied to $FIDO_ROOT"
+  file delete /tmp/tmp_$fido_soc(host).db
+  file delete /tmp/tmp_$fido_soc(host).inx
+  file delete /tmp/tmp_$fido_soc(host).idx
+  cd $pwd
+  puts "Done."
+}

@@ -1,0 +1,235 @@
+FIDO
+
+FIDO is an acronym that stands for File Based Instrusion Detection Object.
+It works roughtly similarly to the old Academic Source Release version of
+tripwire. The major differences have to do with FIDOs simplicity and
+client/server approach, which I will discuss later.
+
+Basically, FIDO was written to scrath an itch that I had.  I was using the
+old ASR version of tripwire with great success.  However, I found it
+cumbersome to manage the database files.  Basically, the best practice is to
+store them away from the server on read-only media.  That's OK as far as it
+goes, but it is painful in practice, especially when you have numerous
+systems to maintain.  Also, I didn't like the layout of the reports.
+Finally, the database that tripwire uses is not in a format that would allow
+me to easily extract data or change how data is stored.  Enter FIDO.
+
+FIDO was designed with several goals in mind.  First, I wanted it to use the
+database engine that I had written (DCDB).  This would make the data format
+open to me so that I could write other utilities to extract data from the
+database as I saw fit.  Secondly, I wanted it to be client/server (actually,
+client/server-like).  I wanted to run the server application on a different
+server and only have the client on the system that was being analyzed.  That
+way, I could simply shut off the system that I stored the databases on and
+store it in a file cabinet to keep anyone from changing the integrity
+information.  Finally, I wanted FIDO to be written in a scripting language
+so that it would be easy to maintain.
+
+The current version of FIDO meets these requirements rather well, IMHO.
+
+FIDO consists of 2 parts, the server portion (fidod) and the client portion
+(fido).  The server creates a socket on the port that you specify and listens
+on that socket for incoming connections.  The client connects to the server
+portion, gathers information on the directories and files that you specify, and
+spits the information over to fidod.  On the server side the information is
+processed.  If there is no database in $FIDO_ROOT for the host that is
+connecting as a client, fidod creates it with the existing data and exits. 
+However, if there is a database, fidod compares the contents of the existing
+database with the new one and generates 3 reports: an "adds" report showing
+everything that was added to the system since the last analysis, a "deletes"
+report showing everything that was deleted from the system since the last
+analysis, and a "changes" report showing all the changes that have occurred on
+the system since the last analysis.  If you are careful about what directories
+you track with FIDO, this information should be enough to tell you if critical
+files or directories have been changed by a nefarious entity.
+
+There are essentially two separate versions of each fido and fidod.  There is
+the version without encryption and with encryption.  The fido (client program)
+without encryption is called fido.noenc, the one with encryption is called fido.enc. 
+The fidod (server program) without encryption is called fidod.noenc, the one with
+encryption is called fidod.
+
+Configuring FIDO
+
+1. Designate a fido server.  This should be a system that you have complete
+control of and that is preferably used only for the purpose of security
+monitoring.  You should be able to turn it off when it is not in use and you
+should be able to inhibit physical access to it.
+
+2. Install fidod on the fido server.
+
+   a. Copy the DCDB source distribution to a source directory and create the
+      binaries that you will need, as follows:
+
+      cp dcdb-1.2-NN.tar.gz /usr/local/src
+      cd /usr/local/src
+      tar xzf dcdb-1.2-NN.tar.gz
+      cd dcdb-1.2
+      make ; cd lib; make libcdbtcl.so ; make cdbtcl
+
+      In the fidod directory, edit make_fido_compare.sh to match your system
+      and run it with
+      
+      bash make_fido_compare.sh
+      
+      You may need to take some further steps, depending on what architecture
+      you are working on.  Read the README file for DCDB before you proceed.
+
+   b. Copy the contents of the fidod directory to a directory on your fido
+      server.  This will be the directory from which you run fidod and its
+      associated utilities.  Also, copy libcdbtcl-?.??.so into this directory.
+
+   c. Edit the .config file that most fits your architecture.  Use
+      fido.solaris.config if you are on Solaris, fido.linux.config if you are
+      on Linux, or fido.default.config for any other platform.  Reasonable
+      defaults are chosen for Linux and Solaris, but they may not fit your
+      system.  fidod & co. will automatically load one of these, depending on
+      what it finds at startup.
+
+  d.  Edit fidod and change the password variable, as follows:
+
+      set password "Whatever you would like for a password here..."
+
+      You must also update fido so that the password is identical for fidod as
+      it is for fido.  If you fail to do this, fido will not work correctly.
+
+      Note: only do this step if you are using the version of fidod that
+      supports encryption, fidod.enc.  Otherwise, fidod doesn't support
+      passwords by default.
+
+3. For each client, install fido.
+
+   a. copy the DCDB source distribution to a source directory and create the
+      binaries as you did on the server.  Again, read the README file for DCDB
+      before you proceed.
+
+   b. Copy the contents of the fido directory to a directory on your fido
+      client.  I use /etc/trpwr/fido and have another utility that takes md5sums
+      of these files in realtime to make sure fido doesn't get altered by
+      someone nasty.
+
+   c. Edit the .config file that most fits your architecture, as in step c, item
+      2 above.  Also, create fido.dir (and possibly fido.excl and fido.fil). 
+      You can use the samples that are provided.  These files are documented in
+      the fido.{linux,solaris,default}.config files.
+
+   d. Edit fido to change the password variable to the same as what you set in
+      fidod.  Again, these must be identical or fido will not work correctly.
+
+      Note: only do this step if you have edited the config file and changed
+      
+      set FIDO_ENCRYPT 0
+      
+      to
+      
+      set FIDO_ENCRYPT 1
+
+   e. Run tclsh and execute the following in the directory where fido is:
+      load ./libcdbtcl-?.??.so
+      set fido_sha1 [ sha1sum fido ]
+      set cdbtcl_sha1 [ sha1sum cdbtcl.so ]
+      set fp [ open fido.sha1.tcl w 0644 ]
+      puts $fp "set fidoSha1 $fido_sha1"
+      puts $fp "set cdbtclSha1 $cdbtcl_sha1"
+      close $fp
+      exit
+   
+   f. Edit make_fido_proc.sh to match your architecture and then use it to build
+      fido_proc and rough_sort as follows:
+      
+      bash make_fido_proc.sh
+
+Running FIDO
+
+If you have done everything successfully, you should now be able to run FIDO. 
+On the fido server, cd to the fido binary directory and run the server
+component:
+
+cd /etc/trpwr/bin
+./fidod
+
+or
+
+./fidod 2041
+
+In the first instance, fidod sets up a socket on the default port (2039 unless
+you change it in fido.{solaris,linux,default}.config).  In the second instance,
+fidod sets up a listening socket on port 2041.  Make sure you find a port for
+which no other service is listening on your fido server.  I tried to pick ports
+that were not reserved in the IANA database, but these things change rather
+quickly.
+
+Then, on the client, cd to the directory that you have fido installed in and
+execute it according to how you executed the server above:
+
+./fido
+
+or
+
+./fido 2041
+
+If everything works OK, fido will dump data to fidod which will generate a
+temporary database file.  This data will be used to either populate a
+permenant database file for the host being analyzed or to generate the
+reports discussed above.
+
+Finally, and this is the hardest part, you have to familiarize yourself with
+the reports and know what they mean and what changes constitute a problem.
+The most difficult thing about intrusion detection, in my opinion, is the
+false positives.  FIDO will show you that various files have changed over
+the course of normal system usage.  It is encumbant on you as the
+administrator to know whether a file change is a normal thing or indicative
+of an intrusion.
+
+If you know how to use tripwire or aide, this part should be fairly simple. 
+Otherwise, you have a fairly steep learning curve ahead.  The best way to
+learn it is to dive in and get started.  FIDO is designed to give you a good
+basis for baselining your file system and monitor change.
+
+In the .config files, there is a FIDO_ROOT directory defined (by default it
+is /etc/trpwr/fido).  The databases will be stored in $FIDO_ROOT as
+hostname.{db,idx,inx} where hostname is the name of the host (ie,
+mckoy.tvinet). The .db file is the table, the .i[nd]x files are the index
+for that table. The reports will be stored in $FIDO_ROOT/tmp.  If there are
+no adds, the add report will not be created.  The same is true for deletes
+and changes.  The reports are named as follows:
+
+hostname_adds.YYYYMMDD
+hostname_deletes.YYYYMMDD
+hostname_changes.YYYYMMDD
+
+where hostname is the name of the host and YYYYMMDD is the date stamp, like
+20030402 for 4/2/03 (generated by `date +%Y%m%d`).  The temporary database
+is storred in /tmp as tmp_hostname.{db,idx,inx}.
+
+After fidod has completed and you have determined that any system changes
+are normal, you need to update the permenant fido database.  You can do that
+by running fido_update on the fidod server, as follows:
+
+cd /etc/trpwr/bin (or whatever your binary directory is on the fidod server)
+./fido_update hostname
+
+Use the same 'hostname' as fidod did in creating the databases initially.
+
+There is some information about invocation for the major fido utilities in
+RCS.  If you have the RCS system on your box, you can type
+
+rlog utility
+
+and it will give you some information about 'utility'.  For example,
+
+rlog fidod
+
+will give you some information about the fidod FIDO server component.
+
+That should be all you need to know to use the system.
+
+FIX
+
+Fix is an offshoot of fido.  It is the File Integrity Checker.  It is designed
+as a stand-alone utility so that you could use it to check multiple file
+systems and maintain the integrity of them.  It differs from fido also in that
+it stores copies of the files that are put under its care in a .tar.gz file.
+
+
+Good luck.

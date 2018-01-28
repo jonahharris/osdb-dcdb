@@ -1,0 +1,62 @@
+#!/bin/bash
+#
+# flesh this out.  Check for the first arg, etc.
+#
+dt=`date +%Y%m%d`
+if [ "x$1" == "x" ]
+then
+  echo "Usage: $0 directory [sleep]"
+  echo "  where directory is the directory to traverse and"
+  echo "  sleep is the number of seconds to pause between lines"
+  exit 1
+fi
+sleep_mode=0
+if [ "x$2" != "x" ]
+then
+  sleep_mode=$2
+fi
+
+FIND_BIN=`which find`
+if [ ! -f $FIND_BIN ]
+then
+  echo "Couldn't find a suitable find command"
+  exit 1
+fi
+
+MD5SUM_BIN=`which md5sum`
+if [ ! -f $MD5SUM_BIN ]
+then
+  echo "Couldn't find a suitable md5sum command"
+  exit 1
+fi
+
+SHA1SUM_BIN=`which sha1sum`
+if [ ! -f $SHA1SUM_BIN ]
+then
+  echo "Couldn't find a sutable sha1sum command"
+  exit 1
+fi
+
+$FIND_BIN $1 -type f -xdev | sed 's/ /+_+/g' > /tmp/chx_get_file_lists.$dt
+for file in `cat /tmp/chx_get_file_lists.$dt`
+do 
+  # Deal with spaces in file names (hint: only morons put spaces in file names)
+  file=`echo $file | sed 's/+_+/ /g'`
+  # Deal with the translation for ^M's (hint: no, I won't go there).
+  MD5SUM=`$MD5SUM_BIN "$file" | cut -f1 -d' '`
+  SHA1SUM=`$SHA1SUM_BIN "$file" | cut -f1 -d' '`
+  listing=`ls -l "$file"`
+  stat_time=`stat -c %y "$file"`
+  THIS_MODE=`echo "$listing" | awk '{ print $1 }'`
+  THIS_OWNER=`echo "$listing" | awk '{ print $3 }'`
+  THIS_GROUP=`echo "$listing" | awk '{ print $4 }'`
+  THIS_SIZE=`echo "$listing" | awk '{ print $5 }'`
+  THIS_DATE=`echo "$stat_time" | awk '{ print $1 }'`
+  THIS_TIME=`echo "$stat_time" | awk '{ print $2 }' | cut -f1 -d'.'`
+  echo "$file|$THIS_MODE|$THIS_OWNER|$THIS_GROUP|$THIS_SIZE|$THIS_DATE@$THIS_TIME|$MD5SUM|$SHA1SUM"
+  if [ $sleep_mode -gt 0 ]
+  then
+    sleep $sleep_mode
+  fi
+done
+

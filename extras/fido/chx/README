@@ -1,0 +1,69 @@
+This is chx.  chx is designed to be a simple checker for changes in files in a
+directory or directories.  It is most useful to get a quick assessment of
+changes that have occurred in a directory structure over time or in comparing
+one directory structure with another.
+
+For example, in our administration we have a primary database system and a
+secondary that is configured to be a total replacement should we loose the
+primary.  There are critical file systems on the secondary that I sync with
+corresponding file systems on the primary so we could come up in production
+mode on the secondary quickly.  However, there are a group of programers who
+have very little discipline as far as making changes to these file systems in
+any kind of controlled way.
+
+I use chx to take snapshots of the file systems and insure that they are kept
+in sync.  I compare snapshots of the file system on the primary from one week
+to the next (to insure that nothing has changed in an uncontrolled way on this
+file system) and I compare snapshots between the primary and the secondary to
+insure that they are in sync.  Users know that I will be aware of changes and
+will bring them to their attention and so are more concientious about what they
+do with these file systems.
+
+I am sure that every system administrator alive has similar accountability needs
+with users of elevated privilege.
+
+To use chx, you get snapshots using the chx_get_file_lists.{shl,tcl} scripts. 
+The TCL script is probably the most effective means of getting this information,
+but requires that you compile DCDB's libcdbtcl.{so,dll} binary for each client. 
+The shell script performs the same function, but does so without the need for
+the shared object.  To get a snapshot of some directory using the script, type
+the following:
+
+./chx_get_file_lists.shl /some/directory >chx_snapshot.20040511
+
+Then, a few days later you can run the same command.  To get a report of changes
+between the directories, copy the snapshots to the system where you have DCDB
+installed and issue the following commands:
+
+cp ../../../lib/libcdbtcl.so .
+./chx chx_shapshot.day1 chx_snapshot.day2
+
+Notice that this assumes that you have followed the instructions for DCDB and
+compiled the libcdbtcl.so shared object.  This should give you a report of the
+additions, deletions and changes that have occurred on the files in the
+directory you are monitoring.
+
+I have also added the chx_solaris_contents TCL script and the
+filter_solaris8_contents_file.shl script.  These are designed to help the
+administrator who works with Solaris 8.  Basically, they will give you a list of
+files that have changed between one patch level and the next.  This is done by
+comparing a new contents file to the old one (the contents file is the
+/var/sadm/install/contents file).  Consider the following example:
+
+You have 2 files, con.20030818 and con.20040808.  The first is the contents
+file after you patched in 20030818 and the second is the contents file after
+you patched on 20040808 (if you don't save the contents files, you should).  To
+process those 2, you would do the following:
+
+cp ../../../lib/libconttcl.so .
+./filter_solaris8_contents_file.shl /tmp/con.20040808 /tmp/con.20030818
+./chx_solaris_contents /tmp/con.20040808.output /tmp/con.20030818.output
+
+After this, you will have a file called solaris_contents_diff.txt that contains
+the files that were added and changed in the system.  Note that this only
+includes files (not directories, etc).  You should make sure to run
+chx_solair_contents with the most recent contents file as the first argument and
+the second most recent file as the second argument.  It makes assumptions about
+the contents that will not be correct if you don't do it this way.
+
+Enjoy.

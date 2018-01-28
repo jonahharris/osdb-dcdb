@@ -1,0 +1,26 @@
+echo off
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test
+@test

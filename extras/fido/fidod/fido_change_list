@@ -1,0 +1,250 @@
+#!/bin/sh
+# Let the shell start cdbtcl... \
+exec tclsh "$0" "$@"
+#
+# This script generates a simple list of changes between the data in /tmp/tmp_$hostnm.db
+# and $FIDO_ROOT/tmp/$hostnm.db.  This simplified list makes checking data easier on occasion
+# after a big update or patch.
+#
+# 1. Process the command-line, making sure there is just one item, and then
+# make sure that item exists in /etc/trpwr/fido as a database file.
+# 2. Check changes between /tmp/tmp_$hostnm.db and $FIDO_ROOT/$hostnm.db and generate the
+# list in $FIDO_ROOT/tmp/$hostnm_changes_list.YYYYMMDD.
+#
+# That's it.
+# Should be a no-brainer given what I've already written.
+#
+
+#
+# Load the shared object.
+#
+set SLE [info sharedlibextension]
+if [ catch { load ./libcdbtcl$SLE } result ] {
+	puts "Could not load ./libcdbtcl$SLE: $result"
+	exit 1
+}
+
+#
+# Load the configuration file for this architecture.
+#
+set OS_TYPE [ eval exec uname ]
+if { $OS_TYPE == "SunOS" } {
+	puts "Loading fido.solaris.config..."
+	source fido.solaris.config
+} elseif { $OS_TYPE == "Linux" } {
+	puts "Loading fido.linux.config..."
+	source fido.linux.config
+} else {
+	puts "Loading fido.default.config..."
+	source fido.default.config
+}
+
+set dt [ eval exec $DATE +%Y%m%d ]
+
+#
+# Check the command-line - return value = 1 => bad command-line.
+#
+if { $argc == 0 } {
+	puts "No database to check"
+	puts "Usage: $argv0 hostname"
+	exit 1
+}
+if { $argc > 1 } {
+	puts "Too many command-line arguments"
+	exit 1
+}
+
+set arg1 [ lindex $argv 0 ]
+set fido(file) $arg1
+
+puts "Working with host $arg1"
+
+#
+# Misc. stuff.
+#
+set pwd [ pwd ]
+
+#
+# Check for the existence of $FIDO_ROOT/$arg1.db and /tmp/tmp_$arg1.db.
+# If either don't exist, exit.
+#
+# return value = 2 -> file doesn't exist condition.
+#
+
+set status [ file exists $FIDO_ROOT/$arg1.db ]
+if { $status == 0 } {
+	puts "$FIDO_ROOT/$arg1.db does not exist...bailing now."
+	exit 2
+} else {
+	puts "$FIDO_ROOT/$arg1.db exists"
+}
+
+set status [ file exists /tmp/tmp_$arg1.db ]
+if { $status == 0 } {
+	puts "/tmp/tmp_$arg1.db does not exist...bailing now."
+	exit 2
+} else {
+	puts "/tmp/tmp_$arg1.db exists"
+}
+
+#
+# Open the tables.
+#
+# return value = 3 => error opening tables.
+#
+cd /tmp
+if [ catch { set newdb [ dbopen /tmp/tmp_$arg1.db ] } result ] {
+	puts "***Error: opening /tmp/tmp_$arg1.db: $result"
+	dbexit
+	exit 3
+} else {
+	puts "Opened /tmp/tmp_$arg1.db successfully"
+}
+
+cd $FIDO_ROOT
+if [ catch { set olddb [ dbopen $FIDO_ROOT/$arg1.db ] } result ] {
+	puts "***Error: opening $FIDO_ROOT/$arg1.db: $result"
+	dbexit
+	exit 3
+} else {
+	puts "Opened $FIDO_ROOT/$arg1.db successfully"
+}
+
+#
+# Now, traverse the tables looking for changes.
+#
+cd $FIDO_ROOT
+if [ catch {set change_file [ open tmp/$fido(file)_changes_list.$dt w ] } result ] {
+	puts "***Error: creating $FIDO_ROOT/tmp/$fido(file)_changes_list.$dt for writing: $result"
+	dbexit
+	exit 4
+} else {
+	puts "Opened tmp/$fido(file)_changes_list.$dt successfully"
+}
+
+puts $change_file "Changes on $arg1 : $dt"
+puts $change_file ""
+
+puts "Setting current on $newdb"
+cd /tmp
+if [ catch {dbcurrent $newdb "tmp_$arg1" } result ] {
+	puts "Error setting current index on $newdb: $result"
+	dbexit
+	exit 1
+}
+puts "Setting current on $olddb"
+cd $FIDO_ROOT
+if [ catch {dbcurrent $olddb "$arg1"} result ] {
+	puts "***Error setting current index on $olddb: $result"
+	dbexit
+	exit 1
+}
+dbheadindex $olddb
+
+puts "Starting while loop..."
+set is_changes 0
+set counter 0
+while { 1 } {
+	set print_changes 0
+	set result [ dbiseof $olddb ]
+	if { $result == 1 } {
+		break
+	}
+	set result [ dbretrieve $olddb ]
+	if { $result == 0 } {
+		dbnextindex $olddb
+		continue
+	}
+	incr counter 1
+	set status [ expr $counter%500 ]
+	if { ! $status } {
+		puts -nonewline "."
+		flush stdout
+	}
+	set old_fspec [ dbshow $olddb fspec ]
+	set status [ dbsearchexact $newdb $old_fspec ]
+	if { $status == 1 } {
+		set result [ dbretrieve $newdb ]
+		if { $result == 0 } {
+			dbnextindex $olddb
+			continue
+		}
+		set old_uid [ dbshow $olddb uid ]
+		set new_uid [ dbshow $newdb uid ]
+		set status [ string compare $old_uid $new_uid ]
+		if { $status } {
+			incr print_changes
+		}
+		set old_gid [ dbshow $olddb gid ]
+		set new_gid [ dbshow $newdb gid ]
+		set status [ string compare $old_gid $new_gid ]
+		if { $status } {
+			incr print_changes
+		}
+		set old_size [ dbshow $olddb size ]
+		set new_size [ dbshow $newdb size ]
+		set status [ string compare $old_size $new_size ]
+		if { $status } {
+			incr print_changes
+		}
+		set is_mtime 0
+		set old_mtime [ dbshow $olddb mtime ]
+		set new_mtime [ dbshow $newdb mtime ]
+		set status [ string compare $old_mtime $new_mtime ]
+		if { $status } {
+			set is_mtime 1
+			incr print_changes
+		}
+		set old_md5sum [ dbshow $olddb md5sum ]
+		set new_md5sum [ dbshow $newdb md5sum ]
+		set status [ string compare $old_md5sum $new_md5sum ]
+		if { $status } {
+			incr print_changes
+		}
+		set old_sha1sum [ dbshow $olddb sha1sum ]
+		set new_sha1sum [ dbshow $newdb sha1sum ]
+		set status [ string compare $old_sha1sum $new_sha1sum ]
+		if { $status } {
+			incr print_changes
+		}
+		set old_ripesum [ dbshow $olddb ripesum ]
+		set new_ripesum [ dbshow $newdb ripesum ]
+		set status [ string compare $old_ripesum $new_ripesum ]
+		if { $status } {
+			incr print_changes
+		}
+		if { $print_changes } {
+			#
+			# Ignore it if it is ONLY a time change.
+			#
+			if { $is_mtime } {
+				if { $print_changes == 1 } {
+					dbnextindex $olddb
+					continue
+				}
+			}
+			#
+			# It's more than just a time change...print it.
+			#
+			incr is_changes 1
+
+			puts $change_file "$new_mtime : $old_fspec"
+		}
+	}
+	dbnextindex $olddb
+}
+if { ! $is_changes } {
+	puts ""
+	close $change_file
+	file delete $FIDO_ROOT/tmp/$fido(file)_changes_list.$dt
+} else {
+	puts ""
+	puts "$is_changes changes in $FIDO_ROOT/tmp/$fido(file)_changes_list.$dt"
+	puts $change_file "Completed successfully with $is_changes changes on $arg1"
+	close $change_file
+}
+
+dbexit
+puts "Done."
+exit 0
+

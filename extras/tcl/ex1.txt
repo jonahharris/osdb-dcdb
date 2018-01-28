@@ -1,0 +1,9 @@
+# [BeginDoc]
+# [Verbatim]
+if [ catch { load ../cdbtcl.so } result ] {
+  puts "Couldn't load ../cdbtcl.so: $result"
+  return 1
+}
+lappend auto_path /home/dfmay/devl/cdb-1.1/src/tcl
+package require cdb 1.1
+# [EndDoc]

@@ -1,0 +1,7 @@
+# [BeginDoc]
+# [Verbatim]
+set seed [ clock clicks -milliseconds ]
+cdb::randomInit $seed
+set randVal [ cdb::randomRange 100 ]
+...use $randVal
+# [EndDoc]

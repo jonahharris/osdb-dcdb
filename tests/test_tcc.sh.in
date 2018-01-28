@@ -1,0 +1,148 @@
+#!/bin/sh
+
+if [ "$1" == "" ]; then
+  echo "Usage: $0 num_items"
+  echo "  where num_items is the number of iterations to run (i.e., 50)"
+  echo "  of each test."
+  exit 1
+fi
+
+cd tcc
+
+echo ""
+echo "Doing $1 iterations..."
+echo ""
+
+echo "Executing flogadd1_tcc.sh: `date +%Y%m%d@%T`"
+bash flogadd1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogadd1_tcc.sh failed"
+	exit 1
+fi
+echo "Finished flogadd1_tcc.sh: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flograwadd1_tcc.sh: `date +%Y%m%d@%T`"
+bash flograwadd1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flograwadd1_tcc.sh failed"
+	exit 1
+fi
+echo "Finished flograwadd1_tcc.sh: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+# end here until finished
+echo "Executing flogadd2_tcc.sh: `date +%Y%m%d@%T`"
+bash flogadd2_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogadd2_tcc.sh failed"
+	exit 1
+fi
+echo "Finished flogadd2_tcc.sh: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flogdel1_tcc.sh: `date +%Y%m%d@%T`"
+bash flogdel1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogdel1_tcc.sh failed"
+	exit 1
+fi
+echo "Finished flogdel1_tcc.sh: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flogdel2_tcc.sh: `date +%Y%m%d@%T`"
+bash flogdel2_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogdel2_tcc.sh failed"
+	exit 1
+fi
+echo "Finished flogdel2_tcc.sh: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flogdel3_tcc.sh: `date +%Y%m%d@%T`"
+bash flogdel3_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogdel3_tcc.sh failed"
+	exit 1
+fi
+echo "Finished flogdel3_tcc.sh: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flogreindex1_tcc.sh: `date +%Y%m%d@%T`"
+bash flogreindex1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogreindex1_tcc.sh failed"
+	exit 1
+fi
+echo "Finished flogreindex1_tcc.sh: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flogenc1_tcc.sh: `date +%Y%m%d@%T`"
+bash flogenc1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogenc1_tcc.sh failed"
+	exit 1
+fi
+echo "Finished flogenc1_tcc.sh: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flogupd1_tcc: `date +%Y%m%d@%T`"
+bash flogupd1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogupd1_tcc failed"
+	exit 1
+fi
+echo "Finished flogupd1_tcc: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flognum1_tcc: `date +%Y%m%d@%T`"
+bash flognum1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flognum1_tcc failed"
+	exit 1
+fi
+echo "Finished flognum1_tcc: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing floghash1_tcc: `date +%Y%m%d@%T`"
+bash floghash1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "floghash1_tcc failed"
+	exit 1
+fi
+echo "Finished floghash1_tcc: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flogthrd1: `date +%Y%m%d@%T`"
+bash flogthrd1_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flogthrd1 failed"
+	exit 1
+fi
+echo "Finished flogthrd1: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Executing flognum2: `date +%Y%m%d@%T`"
+bash flognum2_tcc.sh $1
+if [ $? != 0 ]; then
+	echo "flognum2 failed"
+	exit 1
+fi
+echo "Finished flognum2: `date +%Y%m%d@%T`"
+echo ""
+echo ""
+
+echo "Everything completed successfully."
+

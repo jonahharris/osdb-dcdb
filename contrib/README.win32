@@ -1,0 +1,6 @@
+1. Extract the dcdbVsprojectFile.tar.gz file from cdb-1.1\src\contrib into the cdb-1-1 directory. 
+2. Create a directory pthreads\Pre-built in the same level as the cdb-1.1 directory.
+3. Copy the content of ftp://sources.redhat.com/pub/pthreads-win32/dll-latest to the pthreads\Pre-built directory. 
+4. Create a directory PDCurses in the same level of cdb-1.1.
+5. Download the PDCurses latest zip from http://pdcurses.sourceforge.net/ and extract it into PDCurses directory.
+6  Open in visual studio the C:\tmp\test\cdb-1.1\dcdb\dcdb.dsp project

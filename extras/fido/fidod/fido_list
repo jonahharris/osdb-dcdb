@@ -1,0 +1,132 @@
+#!/bin/sh
+# Let the shell start cdbtcl... \
+exec tclsh "$0" "$@"
+
+#
+# This script lists the fields in a fido database.
+#
+
+#
+# Load the shared object.
+#
+set SLE [info sharedlibextension]
+if [ catch { load ./libcdbtcl$SLE } result ] {
+	puts "Could not load ./libcdbtcl$SLE: $result"
+	exit 1
+}
+
+#
+# Load the configuration file for this architecture.
+#
+set OS_TYPE [ eval exec uname ]
+if { $OS_TYPE == "SunOS" } {
+	puts "Loading fido.solaris.config..."
+	source fido.solaris.config
+} elseif { $OS_TYPE == "Linux" } {
+	puts "Loading fido.linux.config..."
+	source fido.linux.config
+} else {
+	puts "Loading fido.default.config..."
+	source fido.default.config
+}
+
+set dt [ eval exec $DATE +%Y%m%d ]
+
+#
+# Check the command-line - return value = 1 => bad command-line.
+#
+if { $argc == 0 } {
+	puts "No database to list"
+	puts "Usage: $argv0 db1"
+	exit 1
+}
+if { $argc > 2 } {
+	puts "Too many command-line arguments"
+	exit 1
+}
+
+set thisdb [ lindex $argv 0 ]
+set otherdir [ lindex $argv 1 ]
+
+#
+# Misc. stuff.
+#
+set pwd [ pwd ]
+
+#
+# Check for the existence of $FIDO_ROOT/$thisdb.db.
+# If it does not exist, exit.
+#
+# return value = 1 -> file doesn't exist condition.
+#
+
+if { $otherdir == "" } {
+	set status [ file exists $FIDO_ROOT/$thisdb.db ]
+	if { $status == 0 } {
+		puts "$FIDO_ROOT/$thisdb.db does not exist...bailing now."
+		exit 1
+	}
+} else {
+	set status [ file exists $otherdir/$thisdb.db ]
+	if { $status == 0 } {
+		puts "$otherdir/$thisdb.db does not exist...bailing now."
+		exit 1
+	}
+}
+
+#
+# Create the permenant database file and open database files.
+#
+# return value = 2 if this fails.
+if { $otherdir == "" } {
+	cd $FIDO_ROOT
+} else {
+	cd $otherdir
+}
+
+if [ catch { set db [ dbopen $thisdb.db ] } result ] {
+	puts stderr "Could not open $FIDO_ROOT/$thisdb.db: $result"
+	exit 2
+}
+
+#
+# Write the data to the new database file one record at a time.
+#
+# return value = 5 if there is an error here.
+#
+dbhead $db
+puts "Listing $db"
+puts "fspec:uid:gid:size:mode:mtime:md5sum:sha1sum:ripesum"
+puts ""
+while { 1 } {
+	set result [ dbiseof $db ]
+	if { $result == 1 } {
+		break
+	}
+	set result [ dbretrieve $db ]
+	if { $result == 0 } {
+		# skip deleted items
+		dbnext $db
+		continue
+	}
+	set fspec [ dbshow $db fspec ]
+	set uid [ dbshow $db uid ]
+	set gid [ dbshow $db gid ]
+	set size [ dbshow $db size ]
+	set mode [ dbshow $db mode ]
+	set mtime [ dbshow $db mtime ]
+	set md5sum [ dbshow $db md5sum ]
+	set sha1sum [ dbshow $db sha1sum ]
+	set ripesum [ dbshow $db ripesum ]
+	puts "$fspec|$uid|$gid|$size|$mode|$mtime|$md5sum|$sha1sum|$ripesum"
+	dbnext $db
+}
+
+dbclose $db
+
+cd $pwd
+
+puts "Done."
+
+exit 0
+

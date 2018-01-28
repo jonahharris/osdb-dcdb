@@ -1,0 +1,269 @@
+20040211
+
+- I moved 1.1-final to a staging directory.  Then, I consolidated some of the
+source and created the 1.2 distribution.
+- I set up autoconf and automake scripts for portable building with the help of
+Jonah Harris.  Thanks, Jonah.
+- I updated the documentation.
+- Testing is driven by a Makefile in the tests subdirectory.  I now have TCL
+tests written and available.  I will write comparable tests in C and Perl before
+the full 2.0 release.
+
+20040217
+
+- I fixed a bug in split() that was a show stopper.
+
+20040302
+
+- I wrote C test functions that mirrored the tcl test functions (except where
+it didn't make sense to make a C function like that).
+- I configured RCS for the .{h,c,i,tcl,sh} files in the distribution.
+- I did some proof-reading of the documentation and cleaned up some glaring
+problems.
+- I released RC2.
+
+20040309
+
+- I changed the way the TCL and Perl modules were being compiled.  This was due
+in part to trying to make configure do what I wanted and eventually getting
+frustrated and giving up.
+- I enabled the compilation of mycint (the cint bindings) in
+(top)/extras/cint.  It has only been tested on Linux and is kludgy - it isn't
+done automatically by the configure script.
+- I updated RCS for all the stuff that I have finalized till now.
+
+20040310
+
+- I released RC3.
+
+20040311
+
+- I fixed a problem with flograwadd1.c.  DOH!
+
+20040312
+
+- I cleaned up the documentation some more.
+- I made some cosmetic changes to files and such and checked them in.
+- I edited the README file to accommodate the changes that I made.
+- I created a spec file for Mandrake.  I need to test it on RedHat.
+
+20040313
+
+- I released 1.2-1.
+- I made some tweaks to the (topdir)/extras/rpm/dcdb.spec file.
+
+20040324
+
+- I fixed a bug in (topdir)/test/c/flograwadd1.c.  In error messages, I was
+using table as the table name instead of table->fileName.  That would have
+caused a core dump had there been an error.
+- I made some minor changes that were brought out by compiling the C test
+programs with warning levels turned on high.  DOH!
+- I released this as 1.2-2.
+
+20040326
+
+- I made minor performance enhancements (include/index.h).
+
+20040402
+
+- I updated (topdir)/lib/cdb.c and (topdir)/lib/cdbdf.c.  Where supported, I
+replaced calls to sprintf to snprintf in code that got its input from the user.
+- I did a fairly extensive update of the documentation.
+- I released this as 1.2-3.
+
+20040511
+
+- I updated (topdir)/extras/fido/chx.  I added chx_get_file_lists.tcl.  The .shl
+was slow and clunky - the tcl script is faster but requires DCDB's libcdbtcl.so
+to be installed on the client.  Not a problem in my environment.
+
+20040819
+
+- I released 1.2-4.
+
+20040830
+
+- Fixed a typo in the documentation (shlErrorString->shlErrorStr).
+
+20040907
+
+- I fixed an error in cdbui.c in timeStamp2Date().  Dates would come back like
+"200409 4" instead of "20040904".
+
+20040915
+
+- I fixed the broken autoconf shtuff.  Man, autotools is painful.
+- I released 1.2-5.
+
+20040916
+
+- I added the containerRestructureIndex command.
+- I added chx_solaris_contents and filter_solaris8_contents_file.shl in
+(topdir)/extras/fido/chx.
+
+20040917
+
+- I released 1.2-6.
+
+20040923
+
+- I updated (topdir)/extras/fido/fidod/fidod to generate a journal file
+(.jnl).  This is a list of the raw data that is gleaned from the client at the
+time fido is run.  I can use this data for historical purposes.
+- I updated (topdir)/extras/fido/fidod/fido_compare.c to support a -q switch. 
+When envoked with -q (quiet mode), fido_compare only prints the new time stamp
+and the objects name in the change report.
+- I updated (topdir)/extras/fido/fidod/fido_list to print the output in '|'
+delimited format instead of ':' delimited.
+
+20041105
+
+- I added support for tcc (TinyCCompiler).  If tcc isn't on the system, 'make'
+in (topdir)/tests will biff about it a little, but it is the last test.
+
+20041108
+
+- I altered the Makefile in (topdir)/lib and the cdbtcl.i and cdbpl.i files
+so that the container stuff is added to each of them.  I felt it was kind of
+silly to have to include the container stuff seperately.  Also, I felt the
+container stuff was useful enough in tcl, it may be useful in perl as well.
+
+20041230
+
+- I fixed a nasty bug in the sort algorythm.  Basically, when there were
+many duplicates being sorted, the algorythm could GPF or get caught in an
+infinite loop.  The sort algorythm breaks down when you have many duplicates
+and becomes VERY slow (almost uselessly so).  If you have to sort a data
+set that has many duplicates (like, more than half of the items are duplicates
+of one or more of the data set), use something else to sort them initially
+if you can.  The ironic thing is that the index code sorts duplicates very
+well, thank you very much.  Better, in fact, than the in-memory sort.  Go
+figure.
+
+20041231
+
+- I finalized the sort algorythm fix.  Performance is up to par and the tests
+have run with thousands of data sets without error.
+- I am releasing version 1.2-9.
+
+
+20050120
+
+- I incorporated some old tests in (topdir)/extras/regress_test.  Read the
+README in that directory for simple instructions on running the regression tests
+if you want.
+- I released dcdb-1.2-10.
+
+20050128
+- I did a code cleanup so that everything compiles with warnings turned on high
+(-Wall -W).  This also sped up the code a tad bit.
+- I released dcdb-1.2-11.
+
+20050206
+- I removed (topdir)/lib/Makefile.am.  Basically, it was broken and was not
+creating libcdb-x.x-xx.so correctly (I never could get the versioning right and
+the .so disappeared with a new version of automake - piece of junk!)  I just
+hand coded a Makefile.in and that works much better.
+
+20050207
+- I fixed the (topdir)/extras/dcdb.spec file so that it builds successfully
+under Mandrake and RedHat.  I created some rpms for those distributions.
+- I released dcdb-1.2-12.
+
+20050511
+- I included the following source files:
+
+  lib/bcnum.c
+  lib/number.c
+  include/bcnum.h
+  include/number.h
+
+The number.{h,c} files are the source files from the arbitrary precision
+number engine from GNU bc (bc-1.06).  The copyright and attribution for those are in the
+sources.  The difference between this and the original is trivial:
+
+dfmay04:dfmay:~/devl/dcdb-1.2$ diff lib/number.c ~/gnu/bc-1.06/lib/number.c
+33c33
+< #include <string.h>
+---
+> #include <config.h>
+
+There is no difference between the included number.h and that from bc.
+
+The bcnum.{c,h} files are wrappers around the number.{h,c} functionality to make
+it easier to create bindings for TCL and Perl (although, I haven't tested the
+Perl bindings at all).
+Note: the tests/c/flognum1.c file doesn't work on solaris.  I will remove this
+when I fix it.
+- I released dcdb-1.2-13.
+
+20050513
+- I added bcnumuninit to the bcnum bindings so the user can uninitialize the
+bcnum stuff.  This allows a person to free up the memory used by it, even though
+it gets freed up by an atexit() call in cdb.c.
+
+20050520
+- I fixed some minor bugs on bcnum bindings in cdb.c.
+- I released dcdb-1.2-14.
+
+20050503
+- I added the following functions from GNU bc: bc_sub, bc_is_zero,
+bc_is_near_zero, bc_is_neg.  I think the functionality from the bc number engine
+has been fairly well fleshed out.
+- I released dcdb-1.2-15.
+
+20050618
+- I rebuilt the fido client to handle some shortcomings when there are lots
+of files and lots of excludes.  It was a putrid dog in those cases.  There is
+more work to come there.
+
+20050622
+- I added the hash functionality to sort.{h,c}.
+- I added tests/c/floghash1.{c,sh} and tests/tcc/floghash1_tcc.sh.
+- I added tests/c/rough_sort.c
+
+20050624
+- I fixed a memory leak in hash stuff and cleaned up the documentation.
+- I released dcdb-1.2-16.
+
+20050707
+- I changed the way errors are handled in sort.{h,c} to make it a little more
+thread safe.
+- I fixed a few minor bugs.
+
+20050509
+- I wrote tests/c/flogthrd1.{sh,c} to test the threaded sort routines.
+- I further changed the list error handling to make it thread safe.  There is
+more work to do there, though.
+- I released dcdb-1.2-17.
+
+20050729
+- I cleaned up some test stuff that was broken.
+
+20050812
+- I made a minor change to sort.c that drastically improved searches when the
+item being searched for was not there.
+- I updated the documenation for the sort stuff.
+- I added a second test for the bcnum functionality.
+- I released dcdb-1.2-18.
+
+20051212
+- I made slight changes, mostly in the fido stuff.   The changes so far don't
+merit a new release, so I am going to stay with -18.
+
+20060401
+- I reverted back to a simple file lock.  The other locking mechanism isn't
+working.  I will have to revisit it.  And, no, this is not an April fool's joke.
+
+20060410
+- I edited some stuff on the fido client.
+
+20060515
+- I added support for creating a DLL under MinGW that works with ActiveState
+TCL.
+
+20060603
+- I added support for creating a python module.  Also, I added the first python
+test script.  I will add more as time permits.
+

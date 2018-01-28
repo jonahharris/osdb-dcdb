@@ -1,0 +1,257 @@
+INTRODUCTION
+
+DCDB is a database engine similar in scope to CodeBase (R), although it is not
+nearly as feature rich and is not an xBase engine.  DCDB is GPL software (see
+COPYING for the license), or if you prefer, you may use the Perl Artistic
+license (see Artistic).  This software is released under the GPL with the
+additional exemption that compiling, linking, and/or using OpenSSL is allowed. 
+At any rate, DCDB can be freely copied and used in open source projects which
+don't inhibit the use of OpenSSL.  If you are using a distribution that
+includes OpenSSL, you should have no worries about using this software.  If you
+would like to include DCDB in your commercial product, please contact me.
+
+There are several parts to DCDB.  The primary part is the C programming API
+(the database engine itself).  In addition to the API, there are swig
+configuration files for setting up bindings to Tcl/Tk, and Perl.  These
+bindings allow you to use DCDB with your favorite scripting language to create
+and manipulate tables and indexes.  Although the bindings embedded into a
+scripting language are simple, they allow almost the complete capability you
+could achieve using the C API.
+
+GETTING STARTED WITH DCDB
+
+Basically, to start using DCDB, I recommend the following course of action:
+
+- Build DCDB per the instructions below.
+- If you are going to use the Tcl bindings to write Tcl scripts, study the
+scripts in (topdir)/tests/tcl and emulate them in your programs.  Use the
+relevant documentation as a reference if you need to understand the specifics
+of a command. In order to use the Tcl bindings, you have to build libcdbtcl.so
+(you only need libconttcl if you want the container stuff without the database
+engine).
+- If you are going to use the C API, study the programs in (topdir)/tests/c and
+use them as examples or templates for building your own C programs.  Use the
+relevant documentation as a reference if you need to understand the specifics of
+a DCDB function.
+
+Overall, the system is fairly easy to use.  There are some subtleties, but if
+they are not documented well enough, let me know and I will fix that.  I use
+this sytem for my own projects and it's designed to be as useable as possible. 
+Hopefully you enjoy it as much as I do and can get some fun out of using it.
+
+BUILDING DCDB
+
+To build DCDB, unpack the distribution as follows:
+
+tar xzf dcdb-1.x-y.tar.gz
+
+It will unpack into a directory called dcdb-1.x.  Change to that directory and
+issue the following commands:
+
+export CFLAGS="-O3 -s -march=whatever_works_for_your_platform"
+./configure
+make
+cd doc ; make ; cd ..
+make install
+cd doc ; make install
+
+By default, configure will install DCDB in /usr/local.  You can use the
+--prefix switch to have it install the libraries and headers some place else. 
+The 'export CFLAGS' line is required unless you want the default, which
+typically includes '-g'.  Since I think it is silly  and wasteful to run
+production code with debugging information in it, I always set this manually. 
+The following are some example CFLAGS:
+
+-O2 -s -march=pentium4 -mcpu=pentium4 - for P4
+-O2 -s -march=i686 -mcpu=i686         - for PIII or better
+-O2 -s -march=i586 -mcpu=i586         - for Pentium
+-O2 -s -msupersparc                   - for Sun UltraSparc (sun4u)
+
+You also may want to use -fno-strength-reduce if you have an older compiler.
+
+To build the scripting modules, do the following:
+
+cd lib
+make libcdbtcl.so
+make libconttcl.so
+make libcdbpl.so
+
+This will build, respectively, libcdbtcl, libconttcl (which you don't need if
+you use libcdbtcl) and libcdbpl shared libraries.  These do not get installed
+when you type 'make install' at the top level.  It is assumed that you would
+want to deliver these with your script applications.  If you want them
+installed, you may be able to type 'make install_bindings' to have them
+install.  If this doesn't work, you will need to install them manually.  Also,
+be aware that you need to install both libcdbpl.{so,dll} and libcdbpl.pm in
+order to have them available for perl.  If you are installing RPMs, you need to
+install the dcdb-extra-*.rpm file.
+
+Depending on where you have OpenSSL and other libraries, you may have to change
+CFLAGS.  For example, on Solaris, if you have openssl in /usr/local, then you
+will probably need to set
+
+CFLAGS="-O2 -s -msupersparc -I/usr/local/include -fno-strength-reduce"
+
+In particular, if you are running a newer version of Debian, you may need to
+include "-I/usr/include/tcl8.4" in the CFLAGS to get things to compile
+correctly.  For Debian, you need libssl-dev, tcl8.4-dev, tetex-base, tetex-bin,
+and swig.  Just 'apt-get install' away with these package names and you are set.
+
+Also, the configure script makes a best effort attempt to figure out what your
+tcl library (libtclX.X.so) is called.  If it is not successful, you will have to
+edit the generated Makefile before hyou can build the tcl bindings.
+
+Finally, to clean up after yourself, you can do a 'make realclean'.
+
+DOCUMENTATION
+
+All the documentation is in LaTeX format.  You can use teTeX or some other
+TeX/LaTeX distribution.  To build the docs, change to the doc directory and type
+'make'.  Notice that this will not work unless you have made the distribution. 
+The 'make' runs ldoc on the source files to extract the LaTeX sources.  Then, it
+runs latex on the LaTeX sources to create the .dvi files.  A 'make
+install' will install the .tex and .dvi files to the doc directory under the
+installation tree.
+
+TESTING
+
+To test the distribution, change to the tests directory and issue a 'make'
+command.  This will build the C tests and then iterate through the tests for a
+small number of times each (10).  Although this doesn't do many iterations, it
+will still take some time to complete.  If you want more extensive testing,
+there are scripts in the testing directory called test_*.sh.  So, the TCL
+testing driver script is test_tcl.sh.  If you want to test more extensively,
+you can run
+
+test_tcl.sh 50
+
+This will run each test for 50 iterations.
+
+Note that the C tests get built by default when you type 'make' in the test
+directory.  In order to run the TCL tests, you will need to compile
+libcdbtcl*.so.  The scripts assume that this lives in (topdir)/lib, which is
+where it is built.
+
+After you are done with testing, there is considerable space used by table and
+index files.  You should do a 'make cleandb' in the (topdir)/tests directory to
+clean all that up.
+
+I added testing support for tcc (Tiny C Compiler).  It is a very interesting
+project by Fabrice Bellard and adding support was as simple as altering the
+shells to call tcc with the existing C files - I didn't have to alter the code
+a bit or compile the .c files to executables to execute the tests.  The tcc
+compiler will take a -run switch which will compile the code on the fly as if
+it were an interpreter.  You do have to make sure that you have built
+libcdbtcl.{so,dll} in the (topdir)/lib directory before you run make to execute
+the tests.
+
+If you are interested in tcc, you can get it at the following (you should check
+for a newer version):
+
+http://fabrice.bellard.free.fr/tcc/tcc-0.9.21.tar.gz
+
+The project homepage is at
+
+http://fabrice.bellard.free.fr/tcc/
+
+If you run make in the (topdir)/tests directory, it will fail if you do not have
+tcc.  However, it will still test the compiled C programs and the TCL programs.
+
+If you are anal-retentive and want to test old functionality as well, you can
+run some regression testing.  In (topdir)/extras/regress_test, read the README
+file and follow the directions.  I incorporated these tests because I kept
+finding myself going back to old testing code as I made necessary changes.
+
+EXTRAS
+
+Cint bindings
+
+DCDB can be compiled to work with CINT, a C interpreter.  This does work well. 
+What is available in (topdir)/extras/cint has been shown to work under Linux. 
+It WILL need some tweaking to get it to work under other distributions.  Read
+the (topdir)/extras/cint/README file.
+
+Fido
+
+I have included an application that I use in system administration that was
+developed using the DCDB database engine.  It is called FIDO, which stands for
+File-based Intrusion Detection Object.  It functions similarly to tripwire or
+AIDE but is a little easier to configure and use, in my opinion, as well as
+providing encrypted transfer of data between the server and the clients. Have a
+look at (topdir)extras/fido/README for a quick introduction and installation
+instructions.
+
+There is an application similar to fido called chx that is included under
+(topdir)/extras/chx.  This is much easier to use than fido.  Basically, you use
+chx_get_file_lists.shl to get a | delimited list for a specific directory. 
+This is considered the snapshot.  Then, you can run this later to see if
+anything changed.  Finally, you can run chx on the 2 files and it will show you
+in a clear report any changes, additions or deletions that have occurred.  Note
+that the stat command is needed with chx_get_file_lists.shl.  It is not included
+by default on Solaris, but you can get the coreutils package from the FSF and
+install it relatively simply.
+
+Perl examples
+
+In (topdir)/extras/perl_examples, there are example scripts that use the perl
+bindings to DCDB.  Make libcdbpl.{so,pm} in the (topdir)/lib directory and then
+copy them over to (topdir)/extras/perl_examples.  Then, you should be able to
+
+perl example1.pl
+
+and so on for the perl examples.
+
+RPM spec
+
+There is a spec file for building RPMs in (topdir)/extras/rpm called
+dcdb.spec.  This is known to work on Mandrake 9.2, RedHat 7.3 and RHAS 2.1.  It
+should work on any RPM based system as it is fairly generic.  To use this file,
+place dcdb.spec in /usr/src/{rpm build location}/SPECS.  On Mandrake, the "rpm
+build location" is /usr/src/RPM/SPECS; on RedHat, it is /usr/src/redhat/SPECS. 
+Then, download the source file to /usr/src/{rpm build location}/SOURCES.  Then,
+in the SPECS directory, type 'rpmbuild -bb dcdb.spec' and it should build the
+rpms.  There are numerous options, beyond the scope of this document, for
+building RPMs.  Please read the documentation provided by your distribution
+vendor.  There is a README file in (topdir)/extras/rpm that provides information
+on how I do it on my Mandrake system and what RPMs then need to be installed to
+use the system.
+
+KNOWN BUGS
+
+DCDB is not thread safe.  The way error information is kept allows one thread
+to clobber another.
+
+SWIG doesn't seem to work with a threaded perl.  If your perl is compiled with
+thread support (like many of the newer Linux distributions are), the swig
+generated bindings may not compile.  The simplest work-around is to download
+the source for perl-5.8.x and compile it without thread support.  That should
+work fine with swig generated bindings.  If I resolve the issue so that you can
+use a threading perl with DCDB, I will indicate so here.
+
+Using DJGPP for DCDB results in an incredibly slow application.  Basically,
+DJGPP has to shift into real mode in order to do file I/O.  This shift is very
+expensive in terms of performance.  Since DCDB does a great deal of file I/O,
+almost anything you do with it is going to be slow under DJGPP.  There is no
+work-around that I know of for this.  There are some other things that are part
+of this distribution that might interest you if you use DJGPP, however, like
+some of the sorting routines and maybe some of the message digest or encryption
+routines.  If you use Win9x or better, you would be better off using cygwin if
+you want to use the database engine, in my opinion.
+
+CONTACTING ME
+
+I can be reached at the following email address:
+
+dmay at cnm dot edu
+
+Please limit queries to email only and I will answer them as time permits. I
+did not develop DCDB as part of my current employment (although I do use it for
+some of the projects here at work) and am careful not to deal with DCDB issues
+on normal work time where possible to avoid any conflict of interest. I will
+respond to your email, though, as soon as possible.
+
+The most current version of DCDB can be gotten at
+
+http://w3.tvi.edu/~dmay/dcdb.html
+
+Enjoy!

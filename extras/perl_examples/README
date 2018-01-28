@@ -1,0 +1,6 @@
+These are example script that show how to use perl with DCDB.  Build the perl
+module per the instructions in the primary README file and then copy
+libcdbpl.pm, libcdbpl-1.2-xx.so and libcdbpl.so (if this is cygwin, the shared
+object ends in .dll) into this directory. Then, you should be able to just run
+the provided scripts using perl.
+

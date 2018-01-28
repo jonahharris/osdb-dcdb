@@ -1,0 +1,189 @@
+#!/bin/sh
+# Let the shell start cdbtcl... \
+exec tclsh "$0" "$@"
+
+#
+# This script renames a fido database.  Basically, it does the same thing as
+# fido_update, except that it moves the database to a new name.  This is not
+# really necessary to use fido - just an extra freeby.
+#
+
+#
+# Load the shared object.
+#
+set SLE [info sharedlibextension]
+if [ catch { load ./libcdbtcl$SLE } result ] {
+	puts "Could not load ./libcdbtcl$SLE: $result"
+	exit 1
+}
+
+#
+# Load the configuration file for this architecture.
+#
+set OS_TYPE [ eval exec uname ]
+if { $OS_TYPE == "SunOS" } {
+	puts "Loading fido.solaris.config..."
+	source fido.solaris.config
+} elseif { $OS_TYPE == "Linux" } {
+	puts "Loading fido.linux.config..."
+	source fido.linux.config
+} else {
+	puts "Loading fido.default.config..."
+	source fido.default.config
+}
+
+set dt [ eval exec $DATE +%Y%m%d ]
+
+#
+# Check the command-line - return value = 1 => bad command-line.
+#
+if { $argc == 0 } {
+	puts "No database to move"
+	puts "Usage: $argv0 db1 db2"
+	exit 1
+}
+if { $argc > 2 } {
+	puts "Too many command-line arguments"
+	exit 1
+}
+
+set olddb [ lindex $argv 0 ]
+set newdb [ lindex $argv 1 ]
+
+if { $olddb == $newdb } {
+	puts "You cannot use the same name for the new databse"
+	exit 1
+}
+
+#
+# Misc. stuff.
+#
+set pwd [ pwd ]
+
+#
+# Check for the existence of $FIDO_ROOT/$olddb.db.
+# If it does not exist, exit.
+#
+# return value = 2 -> file doesn't exist condition.
+#
+
+set status [ file exists $FIDO_ROOT/$olddb.db ]
+if { $status == 0 } {
+	puts "$FIDO_ROOT/$olddb.db does not exist...bailing now."
+	exit 2
+}
+
+#
+# Create the FIDO_ROOT/$newdb.df and issue an error if failure.
+#
+# return value = 3 if could not create it.
+#
+if [ catch { set this_db [ open $FIDO_ROOT/$newdb.df w 0644 ] } result ] {
+	puts "Could not create $FIDO_ROOT/$newdb.df: $result"
+	exit 3
+}
+puts $this_db "create table \"$newdb.db\""
+puts $this_db "  info \"Table of consistency checks for $newdb on $dt\""
+puts $this_db "\{"
+puts $this_db {  "fspec" char (256);}
+puts $this_db {  "uid" char (10);}
+puts $this_db {  "gid" char (10);}
+puts $this_db {  "size" number (12:0);}
+puts $this_db {  "mode" char (10);}
+puts $this_db {  "mtime" char (19);}
+puts $this_db {  "md5sum" char (32);}
+puts $this_db {  "sha1sum" char (40);}
+puts $this_db {  "ripesum" char (40);}
+puts $this_db "\} indexed \{"
+puts $this_db "idx \"$newdb\" 4096:case:unique \"fspec\";"
+puts $this_db "\};"
+
+close $this_db
+
+#
+# Create the permenant database file and open database files.
+#
+# return value = 4 if this fails.
+cd $FIDO_ROOT
+if [ catch { dbcreate $newdb.df } result ] {
+	puts stderr "Could not create $FIDO_ROOT/$newdb.df: $result"
+	exit 4
+}
+file delete $newdb.df
+
+if [ catch { set newdb [ dbopen $newdb.db ] } result ] {
+	puts stderr "Could not open $FIDO_ROOT/$newdb.db: $result"
+	exit 4
+}
+
+if [ catch { set olddb [ dbopen $olddb.db] } result ] {
+	puts stderr "Could not open /tmp/$olddb.db: $result"
+	dbclose $newdb
+	exit 4
+}
+
+#
+# Write the data to the new database file one record at a time.
+#
+# return value = 5 if there is an error here.
+#
+dbhead $olddb
+set counter 0
+while { 1 } {
+	set result [ dbiseof $olddb ]
+	if { $result == 1 } {
+		break
+	}
+	incr counter 1
+	set status [expr $counter%1000]
+        if { $status == 0 } {
+	  puts -nonewline "."
+	  flush stdout
+	}
+	set result [ dbretrieve $olddb ]
+	if { $result == 0 } {
+		# skip deleted items
+		dbnext $olddb
+		continue
+	}
+	set fspec [ dbshow $olddb fspec ]
+	dbsetchar $newdb fspec $fspec
+	set uid [ dbshow $olddb uid ]
+	dbsetchar $newdb uid $uid
+	set gid [ dbshow $olddb gid ]
+	dbsetchar $newdb gid $gid
+	set size [ dbshow $olddb size ]
+	dbsetnum $newdb size $size
+	set mode [ dbshow $olddb mode ]
+	dbsetchar $newdb mode $mode
+	set mtime [ dbshow $olddb mtime ]
+	dbsetchar $newdb mtime $mtime
+	set md5sum [ dbshow $olddb md5sum ]
+	dbsetchar $newdb md5sum $md5sum
+	set sha1sum [ dbshow $olddb sha1sum ]
+	dbsetchar $newdb sha1sum $sha1sum
+	set ripesum [ dbshow $olddb ripesum ]
+	dbsetchar $newdb ripesum $ripesum
+	if [ catch { dbadd $newdb } result ] {
+		puts stderr "***Error: adding record to $FIDO_ROOT/$newdb.db: $result"
+		exit 5
+	}
+	dbnext $olddb
+}
+
+dbclose $olddb
+dbclose $newdb
+
+#
+# OK, back up the old database.
+#
+catch {eval exec $MV -f $FIDO_ROOT/$olddb.db $FIDO_ROOT/backup}
+catch {eval exec $MV -f $FIDO_ROOT/$olddb.idx $FIDO_ROOT/backup}
+catch {eval exec $MV -f $FIDO_ROOT/$olddb.inx $FIDO_ROOT/backup}
+
+cd $pwd
+
+puts "Done."
+
+exit 0
+

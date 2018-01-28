@@ -1,0 +1,13 @@
+# [BeginDoc]
+# [Verbatim]
+set status [ cdb::listTable $table ]
+if { $status } {
+  ... handle the error.
+} else {
+  set len [ llength $cdb::tableListing ]
+  for { set i 0 } { $i < $len } { incr i 1 } {
+    set outstr [ lindex $cdb::tableListing $i ]
+    puts $outstr
+  }
+}
+# [EndDoc]

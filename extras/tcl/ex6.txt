@@ -1,0 +1,46 @@
+# [BeginDoc]
+# [Verbatim]
+
+tableArray(error) - only set if there is an error
+tableArray(numfields) - number of fields in the table
+tableArray(0,name) - field name of field 0
+tableArray(0,indexed) - true if indexed, false otherwise
+tableArray(0,fieldtype) - type of field 0
+tableArray(0,fieldlen) - length of field 0
+tableArray(0,fielddec) - length of decimal portion of field 0 (if applicable)
+...
+tableArray($i,name) - field name for $i
+tableArray($i,indexed) - true if indexed, false otherwise
+tableArray($i,fieldtype) - type of field $i
+tableArray($i,fieldlen) - length of field $i
+tableArray($i,fielddec) - length of decimal portion of field $i (if applicable)
+
+# [EndDoc]
+#
+# [BeginDoc]
+#
+# The $i value ranges from 0 to numfields-1, so for each field, there are
+# 5 entries (name, indexed, fieldtype, fieldlen, and fielddec).
+#
+# You would use the ``listTableArray'' procedure as follows:
+#
+# [Verbatim]
+set status [ cdb::listTableArray $table ]
+if { $status } {
+  puts -nonewline "***Error on tableArray $table: $cdb::tableArray(error)"
+} else {
+  set outstr [ format "There are %d fields in $table" $cdb::tableArray(numfields) ]
+  puts $outstr
+  puts ""
+  for { set i 0 } { $i < $cdb::tableArray(numfields) } { incr i 1 } {
+    set outstr [ format "Field %s, type %s, len %d, declen %d, indexed %s" \
+      $cdb::tableArray($i,name) \
+      $cdb::tableArray($i,fieldtype) \
+      $cdb::tableArray($i,fieldlen) \
+      $cdb::tableArray($i,fielddec) \
+      $cdb::tableArray($i,indexed) ]
+    puts $outstr
+  }
+  puts ""
+}
+# [EndDoc]

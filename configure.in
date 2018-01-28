@@ -1,0 +1,514 @@
+# $Header: /home/dfmay/devl/dcdb-1.2/RCS/configure.in,v 1.8 2006/12/08 19:52:38 dfmay Exp dfmay $
+# =============================================================================
+#                         D C D B  D A T A B A S E
+# =============================================================================
+#
+# FILENAME
+#   configure.in
+#
+# DESCRIPTION
+#   Autoconf Script for DCDB
+#
+# USAGE
+#   Process with autoconf then execute with ./configure
+#
+# LICENSE
+#   GNU General Public License / Artistic License
+#
+# PLATFORM
+#   Linux / UNIX Generic
+#
+# NOTES
+#
+# HISTORY
+#
+# =============================================================================
+
+AC_PREREQ(2.57)
+
+AC_INIT([DCDB],[1.2-18],[dmay@cnm.edu],[dcdb])
+AC_CONFIG_SRCDIR([configure.in])
+AC_CONFIG_AUX_DIR([config])
+AM_CONFIG_HEADER([include/dcdb_config.h])
+AC_CONFIG_TESTDIR([tests])
+
+awk 'BEGIN { printf("\n%c%c%c%c%s%c%c%c\n", 27, 91, 49, 109, "                         *** DCDB Database Engine ***", 27, 91, 109); }'
+awk 'BEGIN { printf("%c%c%c%c%s%c%c%c\n", 27, 91, 49, 109, "===============================================================================", 27, 91, 109); }'
+
+awk 'BEGIN { printf("\n%c%c%c%c%s%c%c%c\n", 27, 91, 49, 109, "Configuring build tools for DCDB...", 27, 91, 109); }'
+AM_INIT_AUTOMAKE([foreign no-texinfo.tex])
+AM_MAINTAINER_MODE
+
+# Autoheader templates
+AH_TEMPLATE([DCDB_DEBUG], [Enable debugging features in the database])
+AH_TEMPLATE([WITH_LFS64], [Compile with large file system 64])
+
+# don't enable debug mode by default for now
+#AC_DEFINE(DCDB_DEBUG)
+
+DCDB_LIBS=""
+DCDB_CFLAGS=""
+LIBDCDB_LIBS="-lm"
+LIBDCDB_INCLUDES="-I../include"
+LIBDCDB_CFLAGS=""
+
+# Configure options.
+DCDB_CC=""
+AC_ARG_WITH(cc,
+  [  --with-cc=<gcc>         specify C compiler],
+  [ DCDB_CC=$withval ])
+if test "x${DCDB_CC}" = "x"; then
+  AC_CHECK_PROG([DCDB_CC], [gcc], [gcc])
+fi
+if test "x${DCDB_CC}" = "x"; then
+  AC_CHECK_PROG([DCDB_CC], [cc], [cc], AC_MSG_ERROR(cc is required))
+fi
+
+AC_ARG_WITH(lfs64,
+  [  --with-lfs64            compile with large file system],
+  [ AC_DEFINE(WITH_LFS64) ])
+
+AC_ARG_ENABLE(debug,
+  [  --enable-debug          enable debugging options],
+  [ AC_DEFINE(DCDB_DEBUG) ])
+
+save_libs="$LIBS"
+
+# Checks for programs.
+AC_PROG_CC
+AC_PROG_LN_S
+AC_PROG_INSTALL
+AC_PROG_MAKE_SET
+AC_LIBTOOL_DLOPEN
+AC_PROG_LIBTOOL
+AC_SUBST(LIBTOOL)
+AC_SUBST(LIBTOOL_DEPS)
+
+# Check tclsh version.
+AC_PATH_PROG(TCLSH,tclsh8.4)
+if test -z $TCLSH; then
+  AC_PATH_PROG(TCLSH,tclsh84)
+fi
+if test $TCLSH
+then
+  echo 'puts "$tcl_version"' >conftest_here
+  echo 'exit' >>conftest_here
+  AC_MSG_CHECKING(TCL version)
+  TCL_VERSION=`cat conftest_here |$TCLSH`
+  tcl_major_ver=`echo $TCL_VERSION | cut -d"." -f1`
+  tcl_minor_ver=`echo $TCL_VERSION | cut -d"." -f2`
+  if test $tcl_major_ver -eq 8 &&
+     test $tcl_minor_ver -ge 1
+  then
+    AC_MSG_RESULT(yes)
+    BUILD_DCDB_TCLMOD="yes"
+    echo "Tcl version: $TCL_VERSION"
+    DCDB_TCL_MAJ=$tcl_major_ver
+    DCDB_TCL_MIN=$tcl_minor_ver
+  else
+    AC_MSG_RESULT(no)
+    AC_MSG_WARN([Your version of tcl is too old...please upgrade.])
+    BUILD_DCDB_TCLMOD="no"
+  fi
+  tclpfx=`echo $TCLSH | cut -f2 -d'/'`
+  if test -f /$tclpfx/include/tcl.h;
+  then
+    DCDB_TCL_INC="/$tclpfx/include"
+  fi
+  if test -f /$tclpfx/include/tcl$tcl_major_ver.$tcl_minor_ver/tcl.h;
+  then
+      DCDB_TCL_INC="/$tclpfx/include/tcl$tcl_major_ver.$tcl_minor_ver"
+  fi
+  #
+  # Last ditch effort.
+  #
+  for dir in /usr/include /usr/include/tcl8.4 /usr/app/include /usr/local/include; do
+    if test -f $dir/include/tcl.h;
+    then
+      DCDB_TCL_INC="$dir"
+    fi
+  done
+  if test x"$DCDB_TCL_INC" = x;
+  then
+    AC_MSG_WARN([Could not determine TCL include directory])
+  fi
+  #
+  # This is ugly.  Use a fall-through approach, grabbing static libs first and then shared libs
+  # if they are available.
+  #
+  if test -f /$tclpfs/lib/libtcl$tcl_majorver$tcl_minor_ver.a;
+  then
+    DCDB_TCL_LIB="/$tclpfx/lib"
+    DCDB_TCL_LIBS="/$tclpfx/lib/tcl$tcl_major_ver.$tcl_minor_ver/libtcl$tcl_major_ver$tcl_minor_ver.a"
+  fi
+  if test -f /$tclpfx/lib/libtcl$tcl_major_ver.$tcl_minor_ver$shrext_cmds;
+  then
+    DCDB_TCL_LIB="/$tclpfx/lib"
+    DCDB_TCL_LIBS="/$tclpfx/lib/libtcl$tcl_major_ver.$tcl_minor_ver$shrext_cmds"
+  fi
+  if test -f /$tclpfx/lib/tcl$tcl_major_ver.$tcl_minor_ver/libtcl$tcl_major_ver.$tcl_minor_ver$shrext_cmds;
+  then
+    DCDB_TCL_LIB="/$tclpfx/lib/tcl$tcl_major_ver.$tcl_minor_ver"
+    DCDB_TCL_LIBS="/$tclpfx/lib/tcl$tcl_major_ver.$tcl_minor_ver/libtcl$tcl_major_ver.$tcl_minor_ver$shrext_cmds"
+  fi
+  if test -f /$tclpfx/lib/tcl$tcl_major_ver.$tcl_minor_ver/libtcl$tcl_major_ver$tcl_minor_ver$shrext_cmds;
+  then
+    DCDB_TCL_LIB="/$tclpfx/lib/tcl$tcl_major_ver$tcl_minor_ver"
+    DCDB_TCL_LIBS="/$tclpfx/lib/tcl$tcl_major_ver.$tcl_minor_ver/libtcl$tcl_major_ver$tcl_minor_ver$shrext_cmds"
+  fi
+  #
+  # Last ditch effort - if there's anything there, we should drop through with it.
+  #
+  for dir in /usr /usr/app /usr/local; do
+    if test -f $dir/lib/libtcl$tcl_major_ver.$tcl_minor_ver.a;
+    then
+      DCDB_TCL_LIB="$dir/lib"
+      DCDB_TCL_LIBS="$dir/lib/libtcl$tcl_major_ver.$tcl_minor_ver.a"
+    fi
+    if test -f $dir/lib/libtcl$tcl_major_ver.$tcl_minor_ver$shrext_cmds;
+    then
+      DCDB_TCL_LIB="$dir/lib"
+      DCDB_TCL_LIBS="$dir/lib/libtcl$tcl_major_ver.$tcl_minor_ver$shrext_cmds"
+    fi
+    if test -f $dir/lib/libtcl$tcl_major_ver$tcl_minor_ver.a;
+    then
+      DCDB_TCL_LIB="$dir/lib"
+      DCDB_TCL_LIBS="$dir/lib/libtcl$tcl_major_ver$tcl_minor_ver.a"
+    fi
+    if test -f $dir/lib/libtcl$tcl_major_ver$tcl_minor_ver$shrext_cmds;
+    then
+      DCDB_TCL_LIB="$dir/lib"
+      DCDB_TCL_LIBS="$dir/lib/libtcl$tcl_major_ver$tcl_minor_ver$shrext_cmds"
+    fi
+  done
+  if test x"$DCDB_TCL_LIB" = x;
+  then
+    AC_MSG_WARN([Could not determine TCL library directory])
+  fi
+else
+  AC_MSG_RESULT(no)
+  AC_MSG_WARN([You need TCL 8.4 or better to install the TCL bindings.])
+fi
+AC_SUBST(BUILD_DCDB_TCLMOD)
+AC_SUBST(DCDB_TCL_INC)
+AC_SUBST(DCDB_TCL_LIB)
+AC_SUBST(DCDB_TCL_LIBS)
+AC_SUBST(DCDB_TCL_MAJ)
+AC_SUBST(DCDB_TCL_MIN)
+
+# Check PERL (Multi-Threaded is NO GOOD)
+AC_PATH_PROG(PERL,perl)
+PERL_THREAD=`$PERL -V:archname | grep thread`
+AC_MSG_CHECKING(for a useable perl)
+#if test x"$PERL_THREAD" = x
+if test -n "$PERL" 
+then
+  AC_MSG_RESULT(yes)
+  if test x"$PERL_THREAD" != x;
+  then
+    AC_MSG_WARN([[
+***
+*** You seem to have a threading perl.  It has been determined that swig
+*** may not work with a threading perl (conflicts with variables in CORE.h).
+*** The perl module may not compile.
+***]])
+  fi
+  AC_MSG_CHECKING(perl version)
+  PERL_VER=`$PERL --version|grep perl|sed q|awk '{print $4}'|sed 's/v//g'`
+  perl_major_ver=`echo $PERL_VER|cut -d "." -f 1`
+  perl_minor_ver=`echo $PERL_VER|cut -d "." -f 2`
+  
+  if test $perl_major_ver -eq 5 && test $perl_minor_ver -ge 6
+  then
+    AC_MSG_RESULT(yes)
+    BUILD_DCDB_PERLMOD="yes"
+    for pdir in `$PERL -e 'print "@INC"'`
+    do
+      if test -f $pdir/CORE/perl.h
+      then
+	      DCDB_PERL_INC=$pdir/CORE
+      fi
+    done
+    DCDB_PERL_LIBS="`$PERL -V:libs | cut -d"'" -f2`"
+  else
+    AC_MSG_RESULT(no)
+    AC_MSG_WARN([[
+***
+*** You need perl-5.6.x minimally.  The perl support will not be built.
+***]])
+    BUILD_DCDB_PERLMOD="no"
+  fi
+else
+  AC_MSG_RESULT(no)
+  BUILD_DCDB_PERLMOD="no"
+fi
+AC_SUBST(BUILD_DCDB_PERLMOD)
+AC_SUBST(DCDB_PERL_INC)
+AC_SUBST(DCDB_PERL_LIBS)
+
+# Python.
+AC_PATH_PROG(PYTHON25,python2.5)
+
+if test -n "$PYTHON25";
+then
+  AC_MSG_CHECKING(Python version)
+  PYTHON_REQUEST_VERSION="2.5"
+  python_version=`$PYTHON25 -V 2>&1 | awk '{print $2}'`
+  python_major_ver=`echo $python_version|cut -d'.' -f1`
+  python_minor_ver=`echo $python_version|cut -d'.' -f2`
+
+  python_major_req=`echo $PYTHON_REQUEST_VERSION | cut -d'.' -f1`
+  python_minor_req=`echo $PYTHON_REQUEST_VERSION | cut -d'.' -f2`
+
+  echo 'import sys' >conftest_here
+  echo 'print sys.prefix' >>conftest_here
+  pypfx=`cat conftest_here | $PYTHON25`
+  if test -n "$pypfx/include/python$python_major_ver.$python_minor_ver/Python.h";
+  then
+    DCDB_PYTHON_INC="$pypfx/include/python$python_major_ver.$python_minor_ver"
+  else
+    AC_MSG_WARN([Could not determine python include directory])
+  fi
+  if test -n "$pypfx/lib/libpython$python_major_ver.$python_minor_ver$shrext_cmds";
+  then
+    DCDB_PYTHON_LIB="$pypfx/lib"
+    DCDB_PYTHON_LIBS="$pypfx/lib/libpython$python_major_ver.$python_minor_ver$shrext_cmds"
+  else
+    AC_MSG_WARN([Could not determine python library directory])
+  fi
+
+  if test $python_major_ver -ge $python_major_req
+  then
+    AC_MSG_RESULT(yes)
+    BUILD_DCDB_PYMOD="yes"
+    echo "Python version: $python_version"
+  else
+    BUILD_DCDB_PYMOD="no"
+    AC_MSG_RESULT(no)
+    AC_MSG_WARN([Installed version of Python is too old])
+  fi
+else
+  AC_PATH_PROG(PYTHON,python)
+  if test -n "$PYTHON";
+  then
+    AC_MSG_CHECKING(Python version)
+    PYTHON_REQUEST_VERSION="2.3"
+    python_version=`$PYTHON -V 2>&1 | awk '{print $2}'`
+    python_major_ver=`echo $python_version|cut -d'.' -f1`
+    python_minor_ver=`echo $python_version|cut -d'.' -f2`
+
+    python_major_req=`echo $PYTHON_REQUEST_VERSION | cut -d'.' -f1`
+    python_minor_req=`echo $PYTHON_REQUEST_VERSION | cut -d'.' -f2`
+
+    echo 'import sys' >conftest_here
+    echo 'print sys.prefix' >>conftest_here
+    pypfx=`cat conftest_here | $PYTHON`
+    if test -n "$pypfx/include/python$python_major_ver.$python_minor_ver/Python.h";
+    then
+      DCDB_PYTHON_INC="$pypfx/include/python$python_major_ver.$python_minor_ver"
+    else
+      AC_MSG_WARN([Could not determine python include directory])
+    fi
+    if test -nm "$pypfx/lib/libpython$python_major_ver.$python_minor_ver$shrext_cmds";
+    then
+      DCDB_PYTHON_LIB="$pypfx/lib"
+      DCDB_PYTHON_LIBS="$pypfx/lib/libpython$python_major_ver.$python_minor_ver$shrext_cmds"
+    else
+      AC_MSG_WARN([Could not determine python library directory])
+    fi
+
+    if test $python_major_ver -ge $python_major_req
+    then
+      AC_MSG_RESULT(yes)
+      BUILD_DCDB_PYMOD="yes"
+      echo "Python version: $python_version"
+    else
+      BUILD_DCDB_PYMOD="no"
+      AC_MSG_RESULT(no)
+      AC_MSG_WARN([Installed version of Python is too old])
+    fi
+  else
+    AC_MSG_RESULT(no)
+    AC_MSG_WARN([[
+***
+*** You need Python-2.3.x minimally.  The Python support will not be built.
+***]])
+      BUILD_DCDB_PYMOD="no"
+  fi
+fi
+AC_SUBST(BUILD_DCDB_PYMOD)
+AC_SUBST(DCDB_PYTHON_INC)
+AC_SUBST(DCDB_PYTHON_LIB)
+AC_SUBST(DCDB_PYTHON_LIBS)
+
+# Checks for SWIG.
+AC_PATH_PROG(SWIG,swig)
+
+# Check SWIG Version
+if test -n "$SWIG";
+then
+    SWIG_REQUEST_VERSION="1.3"
+    AC_MSG_CHECKING(swig version)
+    SWIGLIB=`$SWIG -swiglib`
+    AC_SUBST(SWIG)
+    AC_SUBST(SWIGLIB)
+    AC_SUBST(SWIGFLAGS)
+
+    swig_version=`$SWIG -version 2>&1 | grep SWIG | awk '{print $3}'`
+    swig_major_ver=`echo $swig_version | cut -d "." -f 1`
+    swig_minor_ver=`echo $swig_version | cut -d "." -f 2`
+
+    AC_MSG_RESULT($swig_version)
+
+    SWIGVERNUM=`printf "%02d%02d%02d" $swig_major_ver $swig_minor_ver`
+
+    if test -n "$SWIG_REQUEST_VERSION";
+    then
+        AC_MSG_CHECKING(requested swig version ($SWIG_REQUEST_VERSION))
+
+        swig_major_req=`echo $SWIG_REQUEST_VERSION | cut -d "." -f 1`
+        swig_minor_req=`echo $SWIG_REQUEST_VERSION | cut -d "." -f 2`
+
+        if test $swig_major_ver -ge $swig_major_req &&
+           test $swig_minor_ver -ge $swig_minor_req 
+        then
+           AC_MSG_RESULT(yes)
+        else
+           BUILD_DCDB_PERLMOD="no"
+           BUILD_DCDB_TCLMOD="no"
+           AC_MSG_RESULT(no)
+           AC_MSG_WARN([Installed version of swig is too old!])
+        fi
+    fi
+fi
+
+# Checks for header files.
+AC_HEADER_STDC
+AC_CHECK_HEADERS([fcntl.h malloc.h libintl.h locale.h stddef.h wchar.h io.h])
+AC_CHECK_HEADERS([time.h sys/time.h dir.h pthread.h])
+
+# Check for openssl.
+AC_MSG_CHECKING(openssl libraries)
+#AC_CHECK_LIB(ssl,MD5_Init)
+#if test x"${ac_cv_lib_ssl_MD5_Init}" = xno; then
+AC_CHECK_LIB(ssl,MD5_Init,openssl_ok=yes,openssl_ok=no)
+if test "$openssl_ok" = "no"; then
+  AC_MSG_WARN([[
+***
+*** The libssl library could not be found.  It is needed for the TCL
+*** and perl modules.  These modules may not build.  If they don't,
+*** install openssl and run configure again.
+***]])
+    LIBDCDB_LIBS="$LIBDCDB_LIBS -lssl -lcrypto"
+  else
+    LIBDCDB_LIBS="$LIBDCDB_LIBS -lssl -lcrypto"
+fi
+
+# Check for thread support.
+AC_MSG_CHECKING(for thread support)
+AC_CHECK_LIB(pthread,pthread_mutex_init,pthread_ok=yes,pthread_ok=no)
+if test "$pthread_ok" = "no"; then
+  AC_MSG_WARN("Couldn't find pthread library.")
+else
+  AC_DEFINE(_REENTRANT)
+  AC_DEFINE(_THREAD_SAFE)
+  LIBDCDB_LIBS="$LIBDCDB_LIBS -lpthread"
+fi
+
+# Check for latex.
+AC_MSG_CHECKING(LaTeX)
+AC_CHECK_PROG(IS_LATEX,latex,yes,no)
+if test x"${IS_LATEX}" = xno; then
+  AC_MSG_WARN([[
+***
+*** The LaTeX system could not be found.  The creation of documentation will
+*** fail.  If you want documentation for DCDB, install LaTeX and reconfigure.
+***]])
+fi
+
+# Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_TYPE_SIZE_T
+AC_TYPE_OFF_T
+AC_STRUCT_TM
+
+# Checks for library functions.
+AC_FUNC_ALLOCA
+AC_FUNC_MALLOC
+AC_FUNC_MEMCMP
+AC_FUNC_REALLOC
+AC_FUNC_VPRINTF
+AC_CHECK_FUNCS([memmove memset strerror strchr snprintf \
+		strcasecmp strchr strrchr strdup strstr strtol strlwr])
+
+# DCDB Configuration
+if test "x$prefix" = "x/usr" \
+     -a "x$includedir" = "x\${prefix}/include"; then
+  DCDB_CFLAGS="$CFLAGS"
+else
+  DCDB_CFLAGS="$CFLAGS -I$includedir"
+fi
+
+case "$host_os" in
+    solaris*)
+        DCDB_CFLAGS="$DCDB_CFLAGS -D__solaris__ -fPIC";;
+    linux*)
+        DCDB_CFLAGS="$DCDB_CFLAGS -D__linux__ -fPIC";;
+    cygwin*)
+        DCDB_CFLAGS="$DCDB_CFLAGS -D__cygwin__";;
+esac
+
+DCDB_LIBS="-L$libdir ${LIBDCDB_LIBS}"
+DCDB_LIBRARY_PATH=".:$libdir/$PACKAGE_TARNAME"
+DCDB_MODULE_EXT=`echo "$shlibext" | sed 's/dll\.a/dll/'`
+LIBS="$save_libs"
+
+AC_SUBST(DCDB_CC)
+AC_SUBST(DCDB_CFLAGS)
+AC_SUBST(DCDB_LIBS)
+AC_SUBST(DCDB_LIBRARY_PATH)
+AC_SUBST(DCDB_MODULE_EXT)
+AC_SUBST(DCDBC_CFLAGS)
+AC_SUBST(DCDBC_LIBS)
+AC_SUBST(LIBDCDB_CFLAGS)
+AC_SUBST(LIBDCDB_LIBS)
+#
+# <rant>
+# PLEASE make up your frickin' mind!  Is it shrext_cmds or shrext!?!
+# How many times is this going to change!?!
+# </rant>
+#
+AC_SUBST(shrext_cmds)
+#AC_SUBST(shrext)
+
+AC_CONFIG_FILES([
+		 Makefile bin/Makefile lib/Makefile doc/Makefile tests/Makefile])
+AC_OUTPUT
+
+echo ""
+awk 'BEGIN { printf("\n%c%c%c%c%s%c%c%c\n", 27, 91, 49, 109, "DCDB CONFIGURATION", 27, 91, 109); }'
+echo "=================="
+echo ""
+echo "  PACKAGE               ${PACKAGE_TARNAME}-${PACKAGE_VERSION}"
+echo "  DCDB_CC               ${DCDB_CC}"
+echo "  DCDB_CFLAGS           ${DCDB_CFLAGS}"
+echo "  DCDB_LIBS             ${DCDB_LIBS}"
+echo "  DCDB_LIBRARY_PATH     ${DCDB_LIBRARY_PATH}"
+echo "  DCDB_MODULE_EXT       ${DCDB_MODULE_EXT}"
+echo ""
+echo "  Build DCDB Perl Module............... ${BUILD_DCDB_PERLMOD}"
+echo "     Perl Include Directory............ ${DCDB_PERL_INC}"
+echo "     Perl Libraries ................... ${DCDB_PERL_LIBS}"
+echo "  Build DCDB Tcl Module................ ${BUILD_DCDB_TCLMOD}"
+echo "     TCL Version....................... ${DCDB_TCL_MAJ}.${DCDB_TCL_MIN}"
+echo "     TCL Include Directory............. ${DCDB_TCL_INC}"
+echo "     TCL Library Directory............. ${DCDB_TCL_LIB}"
+echo "     TCL Library....................... ${DCDB_TCL_LIBS}"
+echo "  Build DCDB Python Module............. ${BUILD_DCDB_PYMOD}"
+echo "     Python Include Directory.......... ${DCDB_PYTHON_INC}"
+echo "     Python Library Directory.......... ${DCDB_PYTHON_LIB}"
+echo "     Python Library ................... ${DCDB_PYTHON_LIBS}"
+echo "  Shared Library Extension............. ${shrext_cmds}"
+echo ""
+echo "  Built for...................${host_cpu}"
+echo ""

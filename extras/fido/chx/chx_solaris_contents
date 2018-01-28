@@ -1,0 +1,396 @@
+#!/bin/sh
+# Start tclsh with sh... \
+  exec tclsh8.4 "$0" "$@"
+
+#
+# NOTE: ****IMPORTANT****IMPORTANT****IMPORTANT****IMPORTANT****
+# Make sure that the most recent contents file is the first argument.
+# So, if you have one from 20040120 and one from 20040325, make sure that
+# the 20040325 contents file is the first argument and the 20040120
+# one is the second argument.  Failure to do so could result in bad
+# results.
+# NOTE: ****IMPORTANT****IMPORTANT****IMPORTANT****IMPORTANT****
+#
+
+set SLE [info sharedlibextension]
+
+if [ catch { load ./libconttcl$SLE } result ] {
+  puts "Could not load ./libconttcl$SLE: $result"
+  exit 1
+}
+
+if { $argc != 2 } {
+  puts "Usage: chx_solaris_contents file1 file2"
+  puts "  Where file1 and file2 are pipe delimited files created from"
+  puts "  the solaris 8 contents file (/var/sadm/install/contents)."
+  puts "  As a Solaris administrator, you should maintain a regular"
+  puts "  copy of this file in another location.  Then, after patching,"
+  puts "  capture a further copy.  This utility will give you a list of"
+  puts "  the files that have changed after patching.  This is useful"
+  puts "  for file based intrusion systems."
+  exit 1
+}
+
+set file1 [lindex $argv 0]
+set file2 [lindex $argv 1]
+
+set fcont1 [open file1.cdf w 0644]
+puts $fcont1 {container "file1cont"}
+puts $fcont1 "{"
+puts $fcont1 {  "name" string (256) unique;}
+puts $fcont1 {  "mode" string (10);}
+puts $fcont1 {  "owner" string (10);}
+puts $fcont1 {  "group" string (10);}
+puts $fcont1 {  "size" int;}
+puts $fcont1 {  "unknown" string (20);}
+puts $fcont1 {  "sum" string (32);}
+puts $fcont1 "\}"
+close $fcont1
+
+if [ catch {set cont1 [containerInit file1.cdf] } result ] {
+  puts "***Error: containerInit file1.cdf: $result"
+  return 1
+}
+file delete -force file1.cdf
+
+set fcont2 [open file2.cdf w 0644]
+puts $fcont2 {container "file2cont"}
+puts $fcont2 "{"
+puts $fcont2 {  "name" string (256) unique;}
+puts $fcont2 {  "mode" string (10);}
+puts $fcont2 {  "owner" string (10);}
+puts $fcont2 {  "group" string (10);}
+puts $fcont2 {  "size" int;}
+puts $fcont2 {  "unknown" string (20);}
+puts $fcont2 {  "sum" string (32);}
+puts $fcont2 "\}"
+close $fcont2
+
+if [ catch {set cont2 [containerInit file2.cdf] } result ] {
+  puts "***Error: containerInit file2.cdf: $result"
+  return 1
+}
+file delete -force file2.cdf
+
+if [ catch { set infile [open $file1 r] } result ] {
+  puts "Couldn't open $file1: $result"
+  exit 1
+}
+
+if [catch {set lineList [ split [ read $infile ] "\n" ] } result ] {
+  puts "Could not parse $file1: $result"
+  exit 1
+}
+close $infile
+
+set counter 0
+foreach line $lineList {
+  incr counter
+  if { $line != "" } {
+    if [catch {set itemList [split $line "|"] } result ] {
+      puts "Could not split \"$line\": $result"
+      return 1
+    }
+    # Ignore everything but files.
+    set ftype [lindex $itemList 1]
+    if { $ftype != "f" } {
+      continue
+    }
+    set name [lindex $itemList 0]
+    set mode [lindex $itemList 3]
+    set owner [lindex $itemList 4]
+    set group [lindex $itemList 5]
+    set size [lindex $itemList 6]
+    set unknown [lindex $itemList 7]
+    set sum [lindex $itemList 8]
+    if [catch {containerSetString $cont1 name "$name"} result] {
+      puts "***Error: containerSetString $cont1 name $name: $result"
+      containerDelete $cont1
+      exit 1
+    }
+    if [catch {containerSetString $cont1 mode $mode} result] {
+      puts "***Error: containerSetString $cont1 mode $mode: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 owner $owner} result] {
+      puts "***Error: containerSetString $cont1 owner $owner: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 group $group} result] {
+      puts "***Error: containerSetString $cont1 group $group: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetInt $cont1 size $size} result] {
+      puts "***Error: containerSetInt $cont1 size $size: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 unknown $unknown} result] {
+      puts "***Error: containerSetString $cont1 unknown $unknown: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 sum $sum} result] {
+      puts "***Error: containerSetString $cont1 sum $sum: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerAddRecord $cont1} result] {
+      puts ""
+      puts "***Error: containerAddRecord $cont1: $name: $result"
+      puts ""
+      containerClearError
+      # Disregard and continue...
+      continue
+    }
+  }
+}
+
+
+if [ catch { set infile [open $file2 r] } result ] {
+  puts "Couldn't open $file2: $result"
+  exit 1
+}
+
+if [catch {set lineList [split [read $infile] "\n"] } result ] {
+  puts "Could not parse $file2: $result"
+  exit 1
+}
+close $infile
+
+foreach line $lineList {
+  if { $line != "" } {
+    if [catch {set itemList [split $line "|"] } result ] {
+      puts "Could not split \"$line\": $result"
+      return 1
+    }
+    # Ignore everything but files.
+    set ftype [lindex $itemList 1]
+    if { $ftype != "f" } {
+      continue
+    }
+    set name [lindex $itemList 0]
+    set mode [lindex $itemList 3]
+    set owner [lindex $itemList 4]
+    set group [lindex $itemList 5]
+    set size [lindex $itemList 6]
+    set unknown [lindex $itemList 7]
+    set sum [lindex $itemList 8]
+    if [catch {containerSetString $cont2 name $name} result] {
+      puts "***Error: containerSetString $cont2 name $name: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 mode $mode} result] {
+      puts "***Error: containerSetString $cont2 mode $mode: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 owner $owner} result] {
+      puts "***Error: containerSetString $cont2 owner $owner: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 group $group} result] {
+      puts "***Error: containerSetString $cont2 group $group: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetInt $cont2 size $size} result] {
+      puts "***Error: containerSetInt $cont2 size $size: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 unknown $unknown} result] {
+      puts "***Error: containerSetString $cont2 unknown $unknown: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 sum $sum} result] {
+      puts "***Error: containerSetString $cont2 sum $sum: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerAddRecord $cont2} result] {
+      puts ""
+      puts "***Error: containerAddRecord $cont2: $name: $result"
+      puts ""
+      containerClearError
+      # Disregard and continue...
+      continue
+    }
+  }
+}
+
+# BUGBUG
+set len [containerNumRecords $cont1]
+puts "Container $cont1 has $len records"
+set len [containerNumRecords $cont2]
+puts "Container $cont2 has $len records"
+# BUGBUG
+if [catch {set status [containerRestructureIndex $cont1]} result] {
+  puts "***Error: calling containerRestructureIndex $cont1: $result"
+  exit 1
+}
+if [catch {set status [containerRestructureIndex $cont2]} result] {
+  puts "***Error: calling containerRestructureIndex $cont2: $result"
+  exit 1
+}
+
+set report [open solaris_contents_diff.txt w 0644]
+
+#
+# OK, our purposes here are slightly different than they are for chx.
+# We want a list of files that can be ignored in a fido_compare report.
+# We will look at everything that was added and changed; deletes are
+# not relevant.
+
+# Look at adds.
+puts stderr "Adds..."
+set Adds [list]
+containerFirst $cont1
+set counter 0
+while { 1 == 1 } {
+  incr counter 1
+  set showstat [expr $counter%1000]
+  if { $showstat == 0 } {
+    puts -nonewline stderr "."
+    flush stderr
+  }
+  set name [containerGetField $cont1 name]
+  set status [containerSearch $cont2 "$name"]
+  if { ! $status } {
+    # BUGBUG
+    #puts "$name"
+    #flush stdout
+    # BUGBUG
+    lappend Adds $name
+  }
+  containerNext $cont1
+  set status [containerEOF $cont1]
+  if { $status } {
+    break
+  }
+}
+
+puts stderr ""
+set len [llength $Adds]
+# BUGBUG
+puts stderr "Number of adds = $len"
+# BUGBUG
+for { set i 0 } { $i < $len } { incr i 1 } {
+  set name [lindex $Adds $i]
+  puts $report "$name"
+}
+flush $report
+
+# Changes.
+set Changes [list]
+puts stderr "Changes..."
+set num_changes 0
+set changes_printed 0
+containerFirst $cont1
+set counter 0
+while { 1 } {
+  incr counter
+  set out_user [expr $counter%1000]
+  if { ! $out_user } {
+    puts -nonewline stderr "."
+    flush stderr
+  }
+  set print_changes 0
+  set mode_delta 0
+  set owner_delta 0
+  set group_delta 0
+  set size_delta 0
+  set timestamp_delta 0
+  set md5_delta 0
+  set sha1_delta 0
+  set result [containerEOF $cont1]
+  if { $result } {
+    break
+  }
+  set name1 [containerGetField $cont1 name]
+  set status [containerSearch $cont2 "$name1"]
+  if { $status == 1 } {
+    set name2 [containerGetField $cont2 name]
+    if { "$name1" != "$name2"} {
+      puts "***Things are wacko with name = $name1"
+      puts "Search produced name = $name2"
+      containerDelete $cont1
+      containerDelete $cont2
+      exit 1
+    }
+    set mode1 [containerGetField $cont1 mode]
+    set mode2 [containerGetField $cont2 mode]
+    set owner1 [containerGetField $cont1 owner]
+    set owner2 [containerGetField $cont2 owner]
+    set group1 [containerGetField $cont1 group]
+    set group2 [containerGetField $cont2 group]
+    set size1 [containerGetField $cont1 size]
+    set size2 [containerGetField $cont2 size]
+    set unknown1 [containerGetField $cont1 unknown]
+    set unknown2 [containerGetField $cont2 unknown]
+    set sum1 [containerGetField $cont1 sum]
+    set sum2 [containerGetField $cont2 sum]
+
+    if { $mode1 != $mode2 } {
+      incr print_changes 1
+      set mode_delta 1
+    }
+    if { $owner1 != $owner2 } {
+      incr print_changes 1
+      set owner_delta 1
+    }
+    if { $group1 != $group2 } {
+      incr print_changes 1
+      set group_delta 1
+    }
+    if { $size1 != $size2 } {
+      incr print_changes 1
+      set size_delta 1
+    }
+    if { $unknown1 != $unknown2 } {
+      incr print_changes 1
+      set timestamp_delta 1
+    }
+    if { $sum1 != $sum2 } {
+      incr print_changes 1
+      set md5_delta 1
+    }
+
+    if { $print_changes != 0 } {
+      incr num_changes 1
+      lappend Changes "$name1"
+    }
+  }
+  containerNext $cont1
+}
+
+puts stderr ""
+set len [llength $Changes]
+# BUGBUG
+puts stderr "Number of adds = $len"
+# BUGBUG
+for { set i 0 } { $i < $len } { incr i 1 } {
+  set name [lindex $Changes $i]
+  puts $report "$name"
+}
+flush $report
+
+close $report
+
+set is_error 0
+if [catch {containerDelete $cont1} result] {
+  puts "***Error: containerDelete $cont1: $result"
+  set is_error 1
+}
+if [catch {containerDelete $cont2} result] {
+  puts "***Error: containerDelete $cont2: $result"
+  set is_error 1
+}
+return $is_error
+

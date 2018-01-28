@@ -1,0 +1,65 @@
+DCDB is a personal database engine designed to be easy to use, light-weight
+and fast.  The homepage for DCDB is
+
+http://w3.tvi.edu/~dmay/dcdb.html
+
+This is cdbtcl.dll, a dynamic link library compiled with MinGW and designed to
+be loaded by ActiveState tcl/tk.  Essentially, you copy the dll to the bin
+directory of the ActiveState distribution on your system,
+
+copy cdbtcl.dll c:\tcl\bin
+
+Then, you load the dll when you want to use it, for example, in a script, as follows:
+
+if [catch {load c:/tcl/bin/cdbtcl.dll} result] {
+  puts "Couldn't load c:/tcl/bin/cdbtcl.dll: $result"
+  exit 1
+}
+
+Then, you can use the commands documented in cdb.pdf under the tcl binding
+section.  There are some of the commands listed there that are not included
+in this DLL and they are as follows:
+
+md5sum
+sha1sum
+rmd160sum
+dbtime
+dbtest* (all the dbtest bindings).
+dbencrypt
+dbdecrypt
+
+If you need any of the functionality above, you can download the entire
+distribution at
+
+http://w3.tvi.edu/~dmay/dcdb-1.2-18.tar.gz
+
+and compile it for cygwin.
+
+You can build the DLL yourself, if you want to.  You will need cygwin (including
+the development system: gcc, make, tcl/tk, swig, openssh - and latex, if you want to
+build docs).  Then, you will need MinGW+MSYS.  When you have them installed and
+you can execute the msys shell environment, you should have enough to build
+cdbtcl.dll.
+
+Unpack dcdb-1.2-18.tar.gz into a directory on your C drive (or some other local
+drive - do not use a DFS drive unless you have lots of time to waste).  Then,
+in a cygwin shell, execute the following:
+
+export CFLAGS="-O2 -s -marc=pentium4 -mtune=pentium4 -Wall -W -finline-functions -funroll-loops -fno-strength-reduce -pipe"
+./configure
+
+Note that you should use CFLAGS that make sense for your environment.  After
+configure is completed, go the the msys shell, cd to the dcdb-1.2/lib directory
+and type
+
+sh build_mingw.sh
+
+If that doesn't complete successfully, you probably do not have the tools that
+you need.  Make sure you have swig with cygwin and make sure you have the
+complete development environment with MinGW+MSYS.  Note also that ActiveState
+TCL needs to be installed in c:\Tcl, which is its default location, I believe.
+
+Once you get a successful installation, you can copy or move cdbtcl.dll from
+dcdb-1.2/lib to c:\tcl\bin and you are ready to go.
+
+Enjoy!

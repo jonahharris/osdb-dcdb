@@ -1,0 +1,204 @@
+#!/bin/sh
+# Let the shell start cdbtcl... \
+exec tclsh "$0" "$@"
+#
+# This script updates the fido database by taking the following steps:
+#
+# 1. Process the command-line, making sure there is just one item, and then
+# make sure that item exists in /etc/trpwr/fido as a database file.
+# 2. Move /etc/trpwr/fido/$arg.db,idx,inx to /etc/trpwr/fido/backup.
+# 3. Do a database copy of /tmp/tmp_$arg.db to /etc/trpwr/fido/$arg.db.
+# 4. Delete /tmp/tmp_$arg.db,idx,inx.
+#
+# That's it.
+#
+# Should be a no-brainer given what's already transpired...
+#
+
+#
+# Load the shared object with DCDB support.
+#
+set SLE [info sharedlibextension]
+if [ catch { load ./libcdbtcl$SLE } result ] {
+	puts "Could not load ./libcdbtcl$SLE: $result"
+	exit 1
+}
+
+#
+# Load the configuration file for this architecture.
+#
+set OS_TYPE [ eval exec uname ]
+if { $OS_TYPE == "SunOS" } {
+	puts "Loading fido.solaris.config..."
+	source fido.solaris.config
+} elseif { $OS_TYPE == "Linux" } {
+	puts "Loading fido.linux.config..."
+	source fido.linux.config
+} else {
+	puts "Loading fido.default.config..."
+	source fido.default.config
+}
+
+set dt [ eval exec $DATE +%Y%m%d ]
+
+#
+# Check the command-line - return value = 1 => bad command-line.
+#
+if { $argc == 0 } {
+	puts "No database to update"
+	puts "Usage: $argv0 hostname"
+	exit 1
+}
+if { $argc > 1 } {
+	puts "Too many command-line arguments"
+	exit 1
+}
+
+set arg [ lindex $argv 0 ]
+
+#
+# Misc. stuff.
+#
+set pwd [ pwd ]
+
+#
+# Check for the existence of $FIDO_ROOT/$arg.db and /tmp/tmp_$arg.db.
+# If either don't exist, exit.
+#
+# return value = 2 -> file doesn't exist condition.
+#
+
+set status [ file exists $FIDO_ROOT/$arg.db ]
+if { $status == 0 } {
+	puts "$FIDO_ROOT/$arg.db does not exist...bailing now."
+	exit 2
+}
+
+set status [ file exists /tmp/tmp_$arg.db ]
+if { $status == 0 } {
+	puts "/tmp/tmp_$arg.db does not exist...bailing now."
+	exit 2
+}
+
+catch {eval exec $MV -f $FIDO_ROOT/$arg.db $FIDO_ROOT/backup}
+catch {eval exec $MV -f $FIDO_ROOT/$arg.idx $FIDO_ROOT/backup}
+catch {eval exec $MV -f $FIDO_ROOT/$arg.inx $FIDO_ROOT/backup}
+
+#
+# Create the FIDO_ROOT/$arg.df and issue an error if failure.
+#
+# return value = 3 if could not create it.
+#
+if [ catch { set this_db [ open $FIDO_ROOT/$arg.df w 0644 ] } result ] {
+	puts "Could not create $FIDO_ROOT/$arg.df: $result"
+	exit 3
+}
+puts $this_db "create table \"$arg.db\""
+puts $this_db "  info \"Table of consistency checks for $arg on $dt\""
+puts $this_db "\{"
+puts $this_db {  "fspec" char (256);}
+puts $this_db {  "uid" char (10);}
+puts $this_db {  "gid" char (10);}
+puts $this_db {  "size" number (12:0);}
+puts $this_db {  "mode" char (10);}
+puts $this_db {  "mtime" char (19);}
+puts $this_db {  "md5sum" char (32);}
+puts $this_db {  "sha1sum" char (40);}
+puts $this_db {  "ripesum" char (40);}
+puts $this_db "\} indexed \{"
+puts $this_db "idx \"$arg\" 4096:case:unique \"fspec\";"
+puts $this_db "\};"
+
+close $this_db
+
+#
+# Create the permenant database file and open database files.
+#
+# return value = 4 if this fails.
+cd $FIDO_ROOT
+if [ catch { dbcreate $arg.df } result ] {
+	puts stderr "Could not create $FIDO_ROOT/$arg.df: $result"
+	exit 4
+}
+file delete $arg.df
+
+if [ catch { set newdb [ dbopen $arg.db ] } result ] {
+	puts stderr "Could not open $FIDO_ROOT/$arg.db: $result"
+	exit 4
+}
+
+cd /tmp
+if [ catch { set olddb [ dbopen tmp_$arg.db] } result ] {
+	puts stderr "Could not open /tmp/tmp_$arg.db: $result"
+	# cd $FIDO_ROOT
+	dbclose $newdb
+	exit 4
+}
+
+#
+# Write the data to the new database file one record at a time.
+#
+# return value = 5 if there is an error here.
+#
+dbhead $olddb
+set counter 0
+while { 1 } {
+	set result [ dbiseof $olddb ]
+	if { $result == 1 } {
+		break
+	}
+	set result [ dbretrieve $olddb ]
+	if { $result == 0 } {
+		# skip deleted items
+		dbnext $olddb
+		continue
+	}
+	set fspec [ dbshow $olddb fspec ]
+	dbsetchar $newdb fspec $fspec
+	set uid [ dbshow $olddb uid ]
+	dbsetchar $newdb uid $uid
+	set gid [ dbshow $olddb gid ]
+	dbsetchar $newdb gid $gid
+	set size [ dbshow $olddb size ]
+	dbsetnum $newdb size $size
+	set mode [ dbshow $olddb mode ]
+	dbsetchar $newdb mode $mode
+	set mtime [ dbshow $olddb mtime ]
+	dbsetchar $newdb mtime $mtime
+	set md5sum [ dbshow $olddb md5sum ]
+	dbsetchar $newdb md5sum $md5sum
+	set sha1sum [ dbshow $olddb sha1sum ]
+	dbsetchar $newdb sha1sum $sha1sum
+	set ripesum [ dbshow $olddb ripesum ]
+	dbsetchar $newdb ripesum $ripesum
+	if [ catch { dbadd $newdb } result ] {
+		puts stderr "***Error: adding record to $FIDO_ROOT/$arg.db: $result"
+		exit 5
+	}
+	incr counter 1
+	set status [ expr $counter%1000 ]
+	if { ! $status } {
+		puts -nonewline "."
+		flush stdout
+	}
+	dbnext $olddb
+}
+
+dbclose $olddb
+#cd $FIDO_ROOT
+dbclose $newdb
+
+#
+# OK, delete the files in /tmp and get on with life.
+#
+file delete /tmp/tmp_$arg.db
+file delete /tmp/tmp_$arg.idx
+file delete /tmp/tmp_$arg.inx
+
+cd $pwd
+
+puts ""
+puts "Done."
+
+exit 0
+

@@ -1,0 +1,456 @@
+#!/bin/sh
+# Start tclsh with sh... \
+  exec tclsh "$0" "$@"
+
+set SLE [info sharedlibextension]
+
+if [ catch { load ./libcdbtcl$SLE } result ] {
+  puts "Could not load ./libcdbtcl$SLE: $result"
+  exit 1
+}
+
+if { $argc != 2 } {
+  puts "Usage: chx file1 file2"
+  puts "  Where file1 and file2 are pipe delimited files with the following"
+  puts "  fields:"
+  puts "  name|mode|owner|group|size|timestamp|md5sum|sha1sum"
+  puts "  name = the name of the file"
+  puts "  mode = the file mode (the second field of ls -l)"
+  puts "  owner = owner of the file"
+  puts "  group = group of the file"
+  puts "  size = size of the file in bytes"
+  puts "  timestamp = year and time of last modification"
+  puts "  md5sum = md5sum of the file"
+  puts "  and sha1sum = sha1sum of the file"
+  exit 1
+}
+
+set file1 [lindex $argv 0]
+set file2 [lindex $argv 1]
+
+set fcont1 [open file1.cdf w 0644]
+puts $fcont1 {container "file1cont"}
+puts $fcont1 "{"
+puts $fcont1 {  "name" string (256) unique;}
+puts $fcont1 {  "mode" string (10);}
+puts $fcont1 {  "owner" string (10);}
+puts $fcont1 {  "group" string (10);}
+puts $fcont1 {  "size" int;}
+puts $fcont1 {  "timestamp" string (20);}
+puts $fcont1 {  "md5sum" string (32);}
+puts $fcont1 {  "sha1sum" string (40);}
+puts $fcont1 "\}"
+close $fcont1
+
+if [ catch {set cont1 [containerInit file1.cdf] } result ] {
+  puts "***Error: containerInit file1.cdf: $result"
+  return 1
+}
+file delete -force file1.cdf
+
+set fcont2 [open file2.cdf w 0644]
+puts $fcont2 {container "file2cont"}
+puts $fcont2 "{"
+puts $fcont2 {  "name" string (256) unique;}
+puts $fcont2 {  "mode" string (10);}
+puts $fcont2 {  "owner" string (10);}
+puts $fcont2 {  "group" string (10);}
+puts $fcont2 {  "size" int;}
+puts $fcont2 {  "timestamp" string (20);}
+puts $fcont2 {  "md5sum" string (32);}
+puts $fcont2 {  "sha1sum" string (40);}
+puts $fcont2 "\}"
+close $fcont2
+
+if [ catch {set cont2 [containerInit file2.cdf] } result ] {
+  puts "***Error: containerInit file2.cdf: $result"
+  return 1
+}
+file delete -force file2.cdf
+
+if [ catch { set infile [open $file1 r] } result ] {
+  puts "Couldn't open $file1: $result"
+  exit 1
+}
+
+if [catch {set lineList [ split [ read $infile ] "\n" ] } result ] {
+  puts "Could not parse $file1: $result"
+  exit 1
+}
+close $infile
+
+set counter 0
+foreach line $lineList {
+  incr counter
+  if { $line != "" } {
+    if [catch {set itemList [split $line "|"] } result ] {
+      puts "Could not split \"$line\": $result"
+      return 1
+    }
+    set name [lindex $itemList 0]
+    set mode [lindex $itemList 1]
+    set owner [lindex $itemList 2]
+    set group [lindex $itemList 3]
+    set size [lindex $itemList 4]
+    set timestamp [lindex $itemList 5]
+    set md5sum [lindex $itemList 6]
+    set sha1sum [lindex $itemList 7]
+    if [catch {containerSetString $cont1 name "$name"} result] {
+      puts "***Error: containerSetString $cont1 name $name: $result"
+      containerDelete $cont1
+      exit 1
+    }
+    if [catch {containerSetString $cont1 mode $mode} result] {
+      puts "***Error: containerSetString $cont1 mode $mode: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 owner $owner} result] {
+      puts "***Error: containerSetString $cont1 owner $owner: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 group $group} result] {
+      puts "***Error: containerSetString $cont1 group $group: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetInt $cont1 size $size} result] {
+      puts "***Error: containerSetInt $cont1 size $size: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 timestamp $timestamp} result] {
+      puts "***Error: containerSetString $cont1 timestamp $timestamp: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 md5sum $md5sum} result] {
+      puts "***Error: containerSetString $cont1 md5sum $md5sum: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont1 sha1sum $sha1sum} result] {
+      puts "***Error: containerSetString $cont1 sha1sum $sha1sum: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerAddRecord $cont1} result] {
+      puts ""
+      puts "***Error: containerAddRecord $cont1: $name: $result"
+      puts ""
+      containerClearError
+      # Disregard and continue...
+      continue
+    }
+  }
+}
+
+
+if [ catch { set infile [open $file2 r] } result ] {
+  puts "Couldn't open $file2: $result"
+  exit 1
+}
+
+if [catch {set lineList [split [read $infile] "\n"] } result ] {
+  puts "Could not parse $file2: $result"
+  exit 1
+}
+close $infile
+
+foreach line $lineList {
+  if { $line != "" } {
+    if [catch {set itemList [split $line "|"] } result ] {
+      puts "Could not split \"$line\": $result"
+      return 1
+    }
+    set name [lindex $itemList 0]
+    set mode [lindex $itemList 1]
+    set owner [lindex $itemList 2]
+    set group [lindex $itemList 3]
+    set size [lindex $itemList 4]
+    set timestamp [lindex $itemList 5]
+    set md5sum [lindex $itemList 6]
+    set sha1sum [lindex $itemList 7]
+    if [catch {containerSetString $cont2 name $name} result] {
+      puts "***Error: containerSetString $cont2 name $name: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 mode $mode} result] {
+      puts "***Error: containerSetString $cont2 mode $mode: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 owner $owner} result] {
+      puts "***Error: containerSetString $cont2 owner $owner: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 group $group} result] {
+      puts "***Error: containerSetString $cont2 group $group: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetInt $cont2 size $size} result] {
+      puts "***Error: containerSetInt $cont2 size $size: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 timestamp $timestamp} result] {
+      puts "***Error: containerSetString $cont2 timestamp $timestamp: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 md5sum $md5sum} result] {
+      puts "***Error: containerSetString $cont2 md5sum $md5sum: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerSetString $cont2 sha1sum $sha1sum} result] {
+      puts "***Error: containerSetString $cont2 sha1sum $sha1sum: $result"
+      puts "   name = $name"
+      continue
+    }
+    if [catch {containerAddRecord $cont2} result] {
+      puts ""
+      puts "***Error: containerAddRecord $cont2: $name: $result"
+      puts ""
+      containerClearError
+      # Disregard and continue...
+      continue
+    }
+  }
+}
+
+if [catch {set status [containerRestructureIndex $cont1]} result] {
+  puts "***Error: calling containerRestructureIndex $cont1: $result"
+  exit 1
+}
+if [catch {set status [containerRestructureIndex $cont2]} result] {
+  puts "***Error: calling containerRestructureIndex $cont2: $result"
+  exit 1
+}
+
+set report [open report.chx w 0644]
+
+# First, look at deletes.
+# Deletes => something in cont1 not in cont2.
+puts stderr "Deletes..."
+set Deletes [list]
+containerFirst $cont1
+while { 1 == 1 } {
+  set name [containerGetField $cont1 name] 
+  set status [containerSearch $cont2 "$name"]
+  if { ! $status } {
+    lappend Deletes "$name"
+  }
+  containerNext $cont1
+  set status [containerEOF $cont1]
+  if { $status } {
+    break
+  }
+}
+set len [llength $Deletes]
+if { $len != 0 } {
+  puts $report "***$len Deletes*** \"$file1\" <-> \"$file2\""
+  puts $report "   (In \"$file1\" and not in \"$file2\")"
+  puts $report ""
+}
+for { set i 0 } { $i < $len } { incr i 1 } {
+  set name [lindex $Deletes $i]
+  puts $report "$name"
+}
+if { $len != 0 } {
+  puts $report ""
+  puts $report ""
+}
+
+# Next, look at adds.
+puts stderr "Adds..."
+set Adds [list]
+containerFirst $cont2
+while { 1 == 1 } {
+  set name [containerGetField $cont2 name]
+  set status [containerSearch $cont1 "$name"]
+  if { ! $status } {
+    lappend Adds "$name"
+  }
+  containerNext $cont2
+  set status [containerEOF $cont2]
+  if { $status } {
+    break
+  }
+}
+set len [llength $Adds]
+if { $len != 0 } {
+  puts $report "***$len Adds*** \"$file1\" <-> \"$file2\""
+  puts $report "   (In \"$file2\" and not in \"$file1\")"
+  puts $report ""
+}
+for { set i 0 } { $i < $len } { incr i 1 } {
+  set name [lindex $Adds $i]
+  puts $report "$name"
+}
+if { $len != 0 } {
+  puts $report ""
+  puts $report ""
+}
+
+# Finally, look at changes.
+puts stderr "Changes..."
+set num_changes 0
+set changes_printed 0
+containerFirst $cont1
+set counter 0
+while { 1 } {
+  incr counter
+  set out_user [expr $counter%1000]
+  if { ! $out_user } {
+    puts -nonewline stderr "."
+    flush stderr
+  }
+  set print_changes 0
+  set mode_delta 0
+  set owner_delta 0
+  set group_delta 0
+  set size_delta 0
+  set timestamp_delta 0
+  set md5_delta 0
+  set sha1_delta 0
+  set result [containerEOF $cont1]
+  if { $result } {
+    break
+  }
+  set name1 [containerGetField $cont1 name]
+  set status [containerSearch $cont2 "$name1"]
+  if { $status == 1 } {
+    set name2 [containerGetField $cont2 name]
+    if { "$name1" != "$name2"} {
+      puts "***Things are wacko with name = $name1"
+      puts "Search produced name = $name2"
+      containerDelete $cont1
+      containerDelete $cont2
+      exit 1
+    }
+    set mode1 [containerGetField $cont1 mode]
+    set mode2 [containerGetField $cont2 mode]
+    set owner1 [containerGetField $cont1 owner]
+    set owner2 [containerGetField $cont2 owner]
+    set group1 [containerGetField $cont1 group]
+    set group2 [containerGetField $cont2 group]
+    set size1 [containerGetField $cont1 size]
+    set size2 [containerGetField $cont2 size]
+    set timestamp1 [containerGetField $cont1 timestamp]
+    set timestamp2 [containerGetField $cont2 timestamp]
+    set md5sum1 [containerGetField $cont1 md5sum]
+    set md5sum2 [containerGetField $cont2 md5sum]
+    set sha1sum1 [containerGetField $cont1 sha1sum]
+    set sha1sum2 [containerGetField $cont2 sha1sum]
+
+    if { $mode1 != $mode2 } {
+      incr print_changes 1
+      set mode_delta 1
+    }
+    if { $owner1 != $owner2 } {
+      incr print_changes 1
+      set owner_delta 1
+    }
+    if { $group1 != $group2 } {
+      incr print_changes 1
+      set group_delta 1
+    }
+    if { $size1 != $size2 } {
+      incr print_changes 1
+      set size_delta 1
+    }
+    if { $timestamp1 != $timestamp2 } {
+      incr print_changes 1
+      set timestamp_delta 1
+    }
+    if { $md5sum1 != $md5sum2 } {
+      incr print_changes 1
+      set md5_delta 1
+    }
+    if { $sha1sum1 != $sha1sum2 } {
+      incr print_changes 1
+      set sha1_delta 1
+    }
+    # Check to make sure that timestamp isn't the only change.  If
+    # it is, continue.
+    if { $timestamp_delta && !$mode_delta && !$owner_delta && !$group_delta \
+      && !$size_delta && !$md5_delta && !$sha1_delta } {
+      containerNext $cont1
+      continue
+    }
+
+    if { $print_changes != 0 } {
+      if { ! $changes_printed } {
+	puts $report "***Changes*** \"$file1\" <-> \"$file2\""
+	set changes_printed 1
+      }
+      incr num_changes 1
+      puts $report ""
+      puts $report "$name1: $print_changes changes"
+      puts -nonewline $report "\["
+      if { $mode_delta } {
+        puts -nonewline $report " mode"
+      }
+      if { $owner_delta } {
+        puts -nonewline $report " owner"
+      }
+      if { $group_delta } {
+        puts -nonewline $report " group"
+      }
+      if { $size_delta } {
+        puts -nonewline $report " size"
+      }
+      if { $timestamp_delta } {
+        puts -nonewline $report " timestamp"
+      }
+      if { $md5_delta } {
+        puts -nonewline $report " md5sum"
+      }
+      if { $sha1_delta } {
+        puts -nonewline $report " sha1sum"
+      }
+      puts $report " \]"
+      set outstr [format "  owner:%-20s  %-20s" $owner1 $owner2]
+      puts $report $outstr
+      set outstr [format "  group:%-20s  %-20s" $group1 $group2]
+      puts $report $outstr
+      set outstr [format "  size: %-20d  %-20d" $size1 $size2]
+      puts $report $outstr
+      set outstr [format "  mode: %-20s  %-20s" $mode1  $mode2]
+      puts $report $outstr
+      set outstr [format "  time: %-20s  %-20s" $timestamp1 $timestamp2]
+      puts $report $outstr
+      puts $report ""
+      puts $report "  old md5sum  =  $md5sum1"
+      puts $report "  new md5sum  =  $md5sum2"
+      puts $report ""
+      puts $report "  old sha1sum =  $sha1sum1"
+      puts $report "  new sha1sum =  $sha1sum2"
+      puts $report ""
+    }
+  }
+  containerNext $cont1
+}
+puts stderr ""
+puts $report ""
+puts $report "Total number of changes: $num_changes"
+puts $report ""
+
+close $report
+
+set is_error 0
+if [catch {containerDelete $cont1} result] {
+  puts "***Error: containerDelete $cont1: $result"
+  set is_error 1
+}
+if [catch {containerDelete $cont2} result] {
+  puts "***Error: containerDelete $cont2: $result"
+  set is_error 1
+}
+return $is_error
+

@@ -1,0 +1,9 @@
+# [BeginDoc]
+# [Verbatim]
+set status [ cdb::fileModeString /bin/ls ]
+if { $status } {
+  puts "***Error calling cdb::fileModeString: $cdb::fileMode"
+} else {
+  puts "Mode of /bin/ls: $cdb::fileMode"
+}
+# [EndDoc]

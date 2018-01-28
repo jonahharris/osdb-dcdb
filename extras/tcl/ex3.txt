@@ -1,0 +1,4 @@
+# [BeginDoc]
+# [Verbatim]
+set randValue [ cdb::random ]
+# [EndDoc]

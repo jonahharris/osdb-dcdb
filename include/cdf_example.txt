@@ -1,0 +1,25 @@
+/*
+ * [BeginDoc]
+ * [Verbatim] */
+// container example
+container "flogcont1"
+{
+  /* supports C and C++ style comments. */
+  "LName" string (64);
+  "SSNumber" string (9) unique;
+  /* the above allows no duplicates, the below allows dups */
+  /* "SSNumber" string (9) dup; */
+  "FName" string (35);
+  "StreetAddress" string (75);
+  "City" string (45);
+  "State" string (2);
+  "Zip" string (10);
+  "AnnualSalary" float;
+  "Age" int;
+  "DOB" long;
+  /* doubles are also supported...*/
+  /* "RealBigAnnualSalary double; */
+}
+This is ignored...
+/* [EndDoc] */
+

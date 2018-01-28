@@ -1,0 +1,76 @@
+#!/bin/sh
+
+badUsage=FALSE
+if [ "$1x" == "x" ]
+then
+  badUsage=TRUE
+fi
+
+if [ "$2x" == "x" ]
+then
+  badUsage=TRUE
+fi
+
+if [ $badUsage == TRUE ]
+then
+  echo "Usage: $0 first second"
+  echo "  where first and second are Solaris 8 contents files"
+  echo "  (/var/sadm/install/contents) to be processed"
+  exit 1
+fi
+
+TCLSH=`which tclsh8.4`
+if [ "x$TCLSH" == "x" ]
+then
+  TCLSH=`which tclsh8.3`
+  if [ "x$TCLSH" == "x" ]
+  then
+    TCLSH=`which tclsh`
+    if [ "x$TCLSH" == "x" ]
+    then
+      # BEEF!
+      echo "There is no viable version of TCL with which to"
+      echo "accomplish this task!"
+      exit 1
+    fi
+  fi
+fi
+
+# This is a trivial job in tcl.
+# Note: must escape the $ with \$ or this no workie.
+
+cat << EOF | $TCLSH > $1.output
+set file [open $1]
+set lineList [split [read \$file] "\n"]
+foreach line \$lineList {
+  if { \$line != "" } {
+    set itemList [split \$line " "]
+    set first [lindex \$itemList 0]
+    if { \$first != "#" } {
+      set lineOut [join \$itemList "|"]
+      puts "\$lineOut"
+    }
+  }
+}
+close \$file
+exit
+EOF
+
+cat << EOF | $TCLSH > $2.output
+set file [open $2]
+set lineList [split [read \$file] "\n"]
+foreach line \$lineList {
+  if { \$line != "" } {
+    set itemList [split \$line " "]
+    set first [lindex \$itemList 0]
+    if { \$first != "#" } {
+      set lineOut [join \$itemList "|"]
+      puts "\$lineOut"
+    }
+  }
+}
+close \$file
+exit
+EOF
+
+exit 0

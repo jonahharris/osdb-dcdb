@@ -1,0 +1,1 @@
+-g -DDEBUG=1 -I../../include ../../lib/{sort,qsort,token,test,cdb}.c ../../lib/cdb{add,df,edit,index,move,pack,table,ui,utils,ws}.c ../../lib/{index,idxblk,block}.c ../../lib/{blowfish,crc32}.c -lssl -lcrypto

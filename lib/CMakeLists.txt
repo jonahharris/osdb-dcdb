@@ -1,0 +1,32 @@
+SET(DCDB_SOURCES
+  test.c
+  qsort.c
+  token.c
+  block.c
+  idxblk.c
+  index.c
+  cdbadd.c
+  cdbindex.c
+  cdbedit.c
+  cdbmove.c
+  cdbtable.c
+  cdbutils.c
+  cdbpack.c
+  cdbui.c
+  cdbws.c
+  cdbdf.c
+  md5.c
+  md5_dgst.c
+  md5_one.c
+  sha1.c
+  sha1_one.c
+  sha1dgst.c
+  rmd160.c
+  rmd_dgst.c
+  rmd_one.c
+  blowfish.c
+  crc32.c
+  sort.c
+  bcnum.c
+  number.c
+)

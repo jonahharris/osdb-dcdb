@@ -1,0 +1,187 @@
+#!/bin/sh
+# Use /bin/sh to execute... \
+  exec tclsh8.4 "$0" "$@"
+
+#
+# Start by initializing some variables.
+#
+set DATE {date}
+set FIND {find}
+set UNAME {uname}
+set GREP {grep}
+set SORT {sort}
+set UNIQ {uniq}
+set CAT {cat}
+set MV {mv}
+set LS {ls}
+set dt [eval exec $DATE +%Y%m%d]
+
+set FIDO_ROOT {/etc/trpwr/fido}
+set FIDO_TMP {/tmp/tfido_tmp.$dt}
+set FIDO_TMP2 {/tmp/tfido_tmp.$dt}
+set FIDO_LIS {fido.list}
+set FIDO_EXC {fido.excl}
+set default_port {2039}
+# This must be set unless you are running it on the same system, which
+# is *NOT* recommended.
+set default_server {127.0.0.1}
+
+#
+# This is the password used to decrypt the data sent over.  This must be the same
+# as that used by fido to encrypt it.
+#
+set password "Sample fido password...change this."
+set fido_size 512
+
+#
+# Server component of the fido duo.
+#
+# The client grabs the information on the specified files and transfers the
+# data over the chanel to the server.  This system is designed to create a
+# socket on a port and listen for a client connection.  Then, it processes
+# the data and either generates a first-time database (if this is the first
+# time fidod has been run for the system being analyzed) or generates
+# any relevant reports about system changes.
+#
+
+#
+# Load the shared object.
+#
+set SLE [info sharedlibextension]
+if [ catch { load ./libcdbtcl$SLE } result ] {
+  puts "Could not load ./libcdbtcl$SLE: $result"
+  exit 1
+}
+
+#
+# Handle command-line.
+#
+# fidod (no argument) - PORT = default (see config file).
+# fidod one - PORT=one.
+#
+if { $argc == 0 } {
+  set PORT $default_port
+}
+
+if { $argc == 1 } {
+  set PORT [ lindex $argv 0 ]
+}
+
+puts "Starting tfidod $PORT..."
+
+if { $argc > 1 } {
+  puts "Usage: $argv0 [port]"
+  puts "  where port (if specified) is a port number - preferably unassigned."
+  exit 1
+}
+
+proc bgerror { str } {
+  global errorInfo
+  global errorCode
+  puts stderr "***Error: $str"
+  puts stderr "errorInfo: $errorInfo"
+  puts stderr "errorCode: $errorCode"
+}
+
+proc fidoServer { port } {
+  global fido_soc
+  set fido_soc(main) [ socket -server fidoAccept $port ]
+}
+
+proc fidoAccept { sock addr port } {
+  global fido_soc
+  puts "Fidod: Accepting $sock from $addr port $port"
+  set fido_soc(addr,$sock) [list $addr $port]
+  fconfigure $sock -buffering line
+  fileevent $sock readable [ list fidoGet $sock ]
+}
+
+proc fidoGet { sock } {
+  global fido_soc
+  global fido_finished
+  global password
+  global fido_size
+  if { [ eof $sock ] || [ catch { gets $sock this_line } ] } {
+    close $sock
+    puts "Close $fido_soc(addr,$sock)"
+    unset fido_soc(addr,$sock)
+    set fido_finished 1
+  } else {
+    # Regular line...process it.
+    #
+    set line [ dbdecrypt $this_line $fido_size $password ]
+    set status [ string compare $line "**END**" ]
+    if { ! $status } {
+      puts ""
+      puts "Received termination indicator..."
+      close $sock
+      unset fido_soc(addr,$sock)
+      set fido_finished 1
+      return
+    }
+    set status [ fidoClientProcess $line ]
+    if { $status } {
+      exit 1
+    }
+  }
+}
+
+proc fidoClientProcess { line } {
+  global dt
+  global FIDO_ROOT
+  global fido_soc
+  global counter
+
+  set item ""
+  incr fido_soc(line)
+  set inList [ split $line | ]
+  if {$fido_soc(line) == 1 || $fido_soc(host) == ""} {
+    set hostnm [lindex $inList 0]
+    set fido_soc(host) $hostnm
+    puts $fido_soc(host)
+    # Open the journal file here.
+    catch {set fido_soc(jnlfile) \
+      [open "/tmp/$fido_soc(host).$dt.jnl" w 0600]}
+  }
+  set item [lindex $inList 1]
+  set uid [lindex $inList 2]
+  set gid [lindex $inList 3]
+  set size [lindex $inList 4]
+  set mode [lindex $inList 5]
+  set mtime [lindex $inList 6]
+  set md5sum [lindex $inList 7]
+  set sha1sum [lindex $inList 8]
+  set ripesum [lindex $inList 9]
+  # Populate the journal line
+  set outline [format "%s|%s|%s|%s|%s|%s|%s|%s|%s" $item $uid $gid $size $mode \
+    $mtime $md5sum $sha1sum $ripesum]
+  puts $fido_soc(jnlfile) $outline
+  # done
+  incr counter 1
+  set status [expr $counter % 1000]
+  if { ! $status } {
+    puts -nonewline "."
+    flush stdout
+  }
+  return 0
+}
+
+set counter 0
+
+set fido_soc(host) ""
+set fido_soc(line) 0
+set fido_soc(jnlfile) ""
+
+set errorInfo ""
+set errorCode ""
+
+cd /tmp
+
+fidoServer $PORT
+vwait fido_finished
+
+close $fido_soc(jnlfile)
+
+puts "$fido_soc(line) entries put in /tmp/$fido_soc(host).$dt.jnl"
+puts "You can now use fido_chx to compare this to the previous map."
+
